@@ -3,13 +3,10 @@ import json
 import psycopg2
 from psycopg2.extras import execute_values
 from dotenv import load_dotenv
-import pandas as pd
-import gzip
 
-# Load environment variables
+
+# ENV
 load_dotenv()
-
-# Connect to Postgres using env vars
 conn = psycopg2.connect(
     dbname=os.getenv("PG_DBNAME"),
     user=os.getenv("PG_USER"),
@@ -17,11 +14,11 @@ conn = psycopg2.connect(
     host=os.getenv("PG_HOST"),
     port=os.getenv("PG_PORT")
 )
-cur = conn.cursor()
 
+# SCHEMA
+cur = conn.cursor()
 with open("schema.sql", "r", encoding="utf-8") as f:
     cur.execute(f.read())
-
 
 
 # Extractors
@@ -36,7 +33,7 @@ def get_Location_Area(data): return (data["id"], data["location"]["name"], data[
 def get_Item(data): return (data["id"], data["name"], data["cost"], data["fling_power"])
 def get_Natures(data): return (data["id"], data["name"], data["increased_stat"]["name"] if data["increased_stat"] else None, data["decreased_stat"]["name"] if data["decreased_stat"] else None)
 
-# Table config
+# TABLE CONFIG
 TABLE_CONFIG = [
     {"name": "pokemon", "path": "./PokeData/api/v2/pokemon", "columns": ["pokemon_id","name","height","weight","base_experience"], "extract": get_Pokemon},
     {"name": "species", "path": "./PokeData/api/v2/pokemon-species", "columns": ["species_id","name"], "extract": get_Id_Name},
