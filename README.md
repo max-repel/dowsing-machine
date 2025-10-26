@@ -2,12 +2,11 @@
 ## About The Project
 <a id="readme-top"></a>
 
-<img alt="image" src="https://static.wikia.nocookie.net/pokemon/images/a/af/Silph_Scope_Let%27s_Go%2C_Pikachu%21_and_Let%27s_Go%2C_Eevee%21_concept_art.png/revision/latest?cb=20190802201959" />
-<img alt="image" src="https://static.wikia.nocookie.net/xianb/images/5/5f/Silph_Scope_PO.png/revision/latest/scale-to-width-down/1000?cb=20250710153813" />
+<img alt="image" src="https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/f/413c5bb0-713b-498a-a17a-c98cce504500/df5rzgo-69631ed5-30fb-4285-b843-d5277e528ae3.png/v1/fill/w_1032,h_774/item_finder__dowsing_machine__by_hiimzoxo_df5rzgo-pre.png?token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1cm46YXBwOjdlMGQxODg5ODIyNjQzNzNhNWYwZDQxNWVhMGQyNmUwIiwiaXNzIjoidXJuOmFwcDo3ZTBkMTg4OTgyMjY0MzczYTVmMGQ0MTVlYTBkMjZlMCIsIm9iaiI6W1t7ImhlaWdodCI6Ijw9OTYwIiwicGF0aCI6Ii9mLzQxM2M1YmIwLTcxM2ItNDk4YS1hMTdhLWM5OGNjZTUwNDUwMC9kZjVyemdvLTY5NjMxZWQ1LTMwZmItNDI4NS1iODQzLWQ1Mjc3ZTUyOGFlMy5wbmciLCJ3aWR0aCI6Ijw9MTI4MCJ9XV0sImF1ZCI6WyJ1cm46c2VydmljZTppbWFnZS5vcGVyYXRpb25zIl19.fvGYZM4C9ZhXrA5o9ubZof2EcO_7Bn3it-gnpdcfM5M" />
 
-Silph Scope is a normalized and consistent relational database with game data from most previous pokemon games as well 10+ years of Smogon's battle data for every metagame. Relations between the two data sources are connected and normalized mainly based on the star schema paradigm. Data is stored in PostgreSQL.
+dowsing-machine is a normalized and consistent relational database with game data from most previous pokemon games as well 10+ years of Smogon's battle data for every metagame. Relations between the two data sources are connected and normalized mainly based on the star schema paradigm. Data is stored in PostgreSQL.
 
-Silph Scope is also a tool for my own personal curiosity. As the name suggests, Silph Scope uncovers "invisible" insights within the data in order to answer any questions regarding previous games or the history of Smogon's battling scene. The database provides a good foundation of data to perform complex analysis with several ML algortihms like regression, clustering, PCA, etc.
+dowsing-machine is also a tool for my own personal curiosity. As the name suggests, it uncovers "invisible" insights within the data in order to answer any questions regarding previous games or the history of Smogon's battling scene. The database provides a good foundation of data to perform complex analysis with several ML algortihms like regression, clustering, PCA, etc.
 
 Some example questions that I currently have:
 
