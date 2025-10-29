@@ -110,7 +110,7 @@ def load_table(cur, cfg):
 for cfg in TABLE_CONFIG:
     load_table(cur, cfg)
 
-# Lists for executemany
+# Lists for execute_values
 ability_list = []
 type_list = []
 stat_list = []
@@ -121,6 +121,8 @@ egg_group_list = []
 move_type_list = []
 color_list = []
 shape_list = []
+version_groups_generations_list = []
+pokemon_generations_list = []
 
 def build_cache(cur, table_name, id_col, name_col="name"):
     cur.execute(f"SELECT {id_col}, {name_col} FROM {table_name}")
@@ -140,6 +142,7 @@ encounter_method_cache = build_cache(cur, "encounter_methods", "encounter_method
 egg_group_cache = build_cache(cur, "egg_groups", "egg_group_id")
 color_cache = build_cache(cur, "colors", "color_id")
 shape_cache = build_cache(cur, "shapes", "shape_id")
+generation_cache = build_cache(cur, "generations", "generation_id")
 
 
 for folder in os.listdir("./PokeData/api/v2/pokemon"):
@@ -272,6 +275,24 @@ for folder in os.listdir("./PokeData/api/v2/move"):
         move_type_list.append((move_id, type_id))
 
 
+# version_group_generations
+for folder in os.listdir("./PokeData/api/v2/generation"):
+    folder_path = os.path.join("./PokeData/api/v2/generation", folder)
+    if not os.path.isdir(folder_path):
+        continue
+    json_path = os.path.join(folder_path, "index.json")
+    if not os.path.exists(json_path):
+        continue
+    with open(json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    generation_id = data['id']
+
+    for vg in data['version_groups']:
+        vg_name = vg['name']
+        vg_id = version_group_cache.get(vg_name)
+        version_groups_generations_list.append((vg_id, generation_id))
+
 # Batch inserts
 execute_values(cur,
     "INSERT INTO pokemon_abilities (pokemon_id, ability_id) VALUES %s ON CONFLICT DO NOTHING",
@@ -327,7 +348,50 @@ execute_values(cur,
     shape_list
 )
 
+execute_values(cur,
+    "INSERT INTO version_groups_generations (version_group_id, generation_id) VALUES %s ON CONFLICT DO NOTHING",
+    version_groups_generations_list
+)
 
+conn.commit()
+
+
+version_groups_generations_cache = build_cache(cur, "version_groups_generations", "generation_id", "version_group_id")
+print(version_groups_generations_cache)
+
+# pokemon_generations
+for folder in os.listdir("./PokeData/api/v2/pokemon"):
+    folder_path = os.path.join("./PokeData/api/v2/pokemon", folder)
+    if not os.path.isdir(folder_path):
+        continue
+    json_path = os.path.join(folder_path, "index.json")
+    if not os.path.exists(json_path):
+        continue
+    with open(json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    vg_set = set()
+    pokemon_id = data["id"]
+    if not data['moves']:
+        earliest_gen = 20
+    else:
+
+        for move in data['moves']:
+            for vgd in move['version_group_details']:
+                vg_name = vgd['version_group']['name']
+                vg_id = version_group_cache.get(vg_name)
+                vg_gen = version_groups_generations_cache.get(vg_id)
+                vg_set.add(vg_gen)
+        print(vg_set)
+        earliest_gen = min(vg_set)
+
+    pokemon_generations_list.append((pokemon_id, earliest_gen))
+
+
+execute_values(cur,
+    "INSERT INTO pokemon_generations (pokemon_id, version_group_id) VALUES %s ON CONFLICT DO NOTHING",
+    pokemon_generations_list
+)
 
 
 
