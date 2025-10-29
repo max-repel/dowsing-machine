@@ -1,17 +1,3 @@
-/*DROP INDEX IF EXISTS idx_pokemon_usage_pokemon_id;
-DROP INDEX IF EXISTS idx_pokemon_usage_metagame_month;
-DROP INDEX IF EXISTS idx_battle_formats_full_metagame;
-DROP INDEX IF EXISTS idx_smogon_items_pokemon_item;
-DROP INDEX IF EXISTS idx_smogon_items_month_metagame;
-DROP INDEX IF EXISTS idx_smogon_moves_pokemon_move;
-DROP INDEX IF EXISTS idx_smogon_moves_month_metagame;
-DROP INDEX IF EXISTS idx_smogon_teammates_pokemon_teammate;
-DROP INDEX IF EXISTS idx_smogon_teammates_month_metagame;
-DROP INDEX IF EXISTS idx_smogon_checks_pokemon_check;
-DROP INDEX IF EXISTS idx_smogon_checks_month_metagame;*/
-
-
-
 CREATE TABLE IF NOT EXISTS pokemon (
     pokemon_id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
@@ -318,7 +304,7 @@ CREATE TABLE IF NOT EXISTS version_groups_generations (
 CREATE TABLE IF NOT EXISTS pokemon_usage (
     pokemon_usage_id SERIAL PRIMARY KEY,
     pokemon_id INTEGER REFERENCES pokemon(pokemon_id),
-    raw_count INTEGER,
+    raw_count DOUBLE PRECISION,
     usage_percent DOUBLE PRECISION,
     players_used INTEGER,
     gxe_top INTEGER,
@@ -360,7 +346,7 @@ CREATE TABLE IF NOT EXISTS smogon_moves (
     smogon_move_id SERIAL PRIMARY KEY,
     pokemon_id INTEGER,
     move_id INTEGER,
-    move_count INTEGER,
+    move_count DOUBLE PRECISION,
     move_perc DOUBLE PRECISION,
     month DATE,
     metagame TEXT
@@ -371,7 +357,7 @@ CREATE TABLE IF NOT EXISTS smogon_teammates (
     smogon_teammate_id SERIAL PRIMARY KEY,
     pokemon_id INTEGER,
     teammate_id INTEGER,
-    teammate_count INTEGER,
+    teammate_count DOUBLE PRECISION,
     month DATE,
     metagame TEXT
 );
@@ -381,7 +367,7 @@ CREATE TABLE IF NOT EXISTS smogon_checks (
     smogon_check_id SERIAL PRIMARY KEY,
     pokemon_id INTEGER,
     check_id INTEGER,
-    check_count INTEGER,
+    check_count DOUBLE PRECISION,
     check_perc DOUBLE PRECISION,
     check_sd DOUBLE PRECISION,
     month DATE,
@@ -393,7 +379,7 @@ CREATE TABLE IF NOT EXISTS smogon_abilities (
     smogon_ability_id SERIAL PRIMARY KEY,
     pokemon_id INTEGER,
     ability_id INTEGER,
-    ability_count INTEGER,
+    ability_count DOUBLE PRECISION,
     ability_perc DOUBLE PRECISION,
     month DATE,
     metagame TEXT
@@ -406,12 +392,6 @@ CREATE TABLE IF NOT EXISTS sprites (
     sprite_name VARCHAR(255),
     sprite_data TEXT
 );
-
-
-
-/*-- INDEX TEXT FOR smogon_checks
-CREATE INDEX IF NOT EXISTS idx_smogon_checks_pokemon_check ON smogon_checks(pokemon_id, check_id);
-CREATE INDEX IF NOT EXISTS idx_smogon_checks_month_metagame ON smogon_checks(month, metagame);*/
 
 
 -- ITEMS
@@ -455,18 +435,3 @@ SET normalized_name = LOWER(
         '-', ''
     )
 );
-
-
-
-/*
-CREATE INDEX IF NOT EXISTS idx_pokemon_usage_pokemon_id ON pokemon_usage(pokemon_id);
-CREATE INDEX IF NOT EXISTS idx_pokemon_usage_metagame_month ON pokemon_usage(metagame_id, month);
-CREATE INDEX IF NOT EXISTS idx_battle_formats_full_metagame ON battle_formats(full_metagame);
-CREATE INDEX IF NOT EXISTS idx_smogon_items_pokemon_item ON smogon_items(pokemon_id, item_id);
-CREATE INDEX IF NOT EXISTS idx_smogon_items_month_metagame ON smogon_items(month, metagame);
-CREATE INDEX IF NOT EXISTS idx_smogon_moves_pokemon_move ON smogon_moves(pokemon_id, move_id);
-CREATE INDEX IF NOT EXISTS idx_smogon_moves_month_metagame ON smogon_moves(month, metagame);
-CREATE INDEX IF NOT EXISTS idx_smogon_teammates_pokemon_teammate ON smogon_teammates(pokemon_id, teammate_id);
-CREATE INDEX IF NOT EXISTS idx_smogon_teammates_month_metagame ON smogon_teammates(month, metagame);
-CREATE INDEX IF NOT EXISTS idx_smogon_checks_pokemon_check ON smogon_checks(pokemon_id, check_id);
-CREATE INDEX IF NOT EXISTS idx_smogon_checks_month_metagame ON smogon_checks(month, metagame);*/

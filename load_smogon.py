@@ -143,10 +143,6 @@ def normalize_name(name):
 
     return name
 
-
-
-
-
 # for file in os.listdir("./SmogonData/2025-09/chaos/gen9ou-0.json"):
 #     json_path = os.path.join("./SmogonData/2025-09/chaos", file)
 #     with open(json_path, "r", encoding="utf-8") as f:
@@ -163,7 +159,7 @@ move_cache = build_cache(cur, "moves", "move_id", "normalized_name")
 ability_cache = build_cache(cur, "abilities", "ability_id", "normalized_name")
 
 
-months = ["2025-01", "2025-02", "2025-03", "2025-04", "2025-05", "2025-06", "2025-07", "2025-08"]
+months = ["2025-09"]
 
 
 missed_pokemon = []
