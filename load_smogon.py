@@ -153,6 +153,7 @@ def build_cache(cur, table_name, id_col, name_col="name"):
     cur.execute(f"SELECT {id_col}, {name_col} FROM {table_name}")
     return {name: _id for _id, name in cur.fetchall()}
 
+
 pokemon_cache = build_cache(cur, "pokemon", "pokemon_id")
 item_cache = build_cache(cur, "items", "item_id", "normalized_name")
 move_cache = build_cache(cur, "moves", "move_id", "normalized_name")
