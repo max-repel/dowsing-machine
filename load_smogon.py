@@ -157,6 +157,7 @@ pokemon_cache = build_cache(cur, "pokemon", "pokemon_id")
 item_cache = build_cache(cur, "items", "item_id", "normalized_name")
 move_cache = build_cache(cur, "moves", "move_id", "normalized_name")
 ability_cache = build_cache(cur, "abilities", "ability_id", "normalized_name")
+type_cache = build_cache(cur, "pokemon_types_def", "type_id")
 
 
 months = ["2025-09"]
@@ -224,6 +225,7 @@ for month in months:
             smogon_moves_inserts = []
             smogon_teammates_inserts = []
             smogon_checks_inserts = []
+            smogon_teras_inserts = []
 
             for pokemon_name, pokemon_data in data["data"].items():
                 viability = pokemon_data["Viability Ceiling"]
@@ -271,6 +273,14 @@ for month in months:
                         if item_id is None and item_name not in missed_items:
                             missed_items.append(item_name)
                         smogon_items_inserts.append((pokemon_id, item_id, item_count, month, metagame))
+
+                # TERA
+                if "Tera Types" in pokemon_data:
+                    total_count = sum(pokemon_data["Tera Types"].values())
+                    for type_name, type_count in pokemon_data["Tera Types"].items():
+                        type_id = type_cache.get(type_name)
+                    type_perc = ((type_count/total_count) * 100)
+                    smogon_teras_inserts.append((pokemon_id, type_id, type_count, type_perc, month, metagame))
 
                 # MOVES
                 if "Moves" in pokemon_data:
@@ -353,6 +363,15 @@ for month in months:
                         (pokemon_id, check_id, check_count, check_perc, check_sd, month, metagame)
                         VALUES %s
                     """, smogon_checks_inserts)
+
+                if smogon_teras_inserts:
+                    execute_values(cur, """
+                        INSERT INTO smogon_teras
+                        (pokemon_id, type_id, type_count, type_perc, month, metagame)
+                        VALUES %s
+                    """, smogon_teras_inserts)
+
+
 
 print("missed abilities", missed_abilities)
 print("missed moves", missed_moves)

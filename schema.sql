@@ -385,6 +385,16 @@ CREATE TABLE IF NOT EXISTS smogon_abilities (
     metagame TEXT
 );
 
+CREATE TABLE IF NOT EXISTS smogon_tera (
+    smogon_tera_id SERIAL PRIMARY KEY,
+    pokemon_id INTEGER,
+    type_id INTEGER,
+    type_count DOUBLE PRECISION,
+    type_perc DOUBLE PRECISION,
+    month DATE,
+    metagame TEXT
+);
+
 
 DROP TABLE IF EXISTS sprites;
 CREATE TABLE IF NOT EXISTS sprites (
