@@ -279,8 +279,8 @@ for month in months:
                     total_count = sum(pokemon_data["Tera Types"].values())
                     for type_name, type_count in pokemon_data["Tera Types"].items():
                         type_id = type_cache.get(type_name)
-                    type_perc = ((type_count/total_count) * 100)
-                    smogon_teras_inserts.append((pokemon_id, type_id, type_count, type_perc, month, metagame))
+                        type_perc = ((type_count/total_count) * 100)
+                        smogon_teras_inserts.append((pokemon_id, type_id, type_count, type_perc, month, metagame))
 
                 # MOVES
                 if "Moves" in pokemon_data:

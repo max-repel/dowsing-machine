@@ -382,14 +382,13 @@ for folder in os.listdir("./PokeData/api/v2/pokemon"):
                 vg_id = version_group_cache.get(vg_name)
                 vg_gen = version_groups_generations_cache.get(vg_id)
                 vg_set.add(vg_gen)
-        print(vg_set)
         earliest_gen = min(vg_set)
 
     pokemon_generations_list.append((pokemon_id, earliest_gen))
 
 
 execute_values(cur,
-    "INSERT INTO pokemon_generations (pokemon_id, version_group_id) VALUES %s ON CONFLICT DO NOTHING",
+    "INSERT INTO pokemon_generations (pokemon_id, generation_id) VALUES %s ON CONFLICT DO NOTHING",
     pokemon_generations_list
 )
 
