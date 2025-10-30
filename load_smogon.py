@@ -298,9 +298,7 @@ for month in months:
                         nature_id = nature_cache.get(nature_name)
                         nature_perc = (nature_count / total_count) * 100
 
-                        smogon_natures_inserts.append(
-                            (pokemon_id, nature_id, nature_count, nature_perc, month, metagame)
-                        )
+                        smogon_natures_inserts.append((pokemon_id, nature_id, nature_count, nature_perc, month, metagame))
 
                 # MOVES
                 if "Moves" in pokemon_data:
@@ -390,6 +388,13 @@ for month in months:
                         (pokemon_id, type_id, type_count, type_perc, month, metagame)
                         VALUES %s
                     """, smogon_teras_inserts)
+
+                if smogon_natures_inserts:
+                    execute_values(cur, """
+                        INSERT INTO smogon_natures
+                        (pokemon_id, nature_id, nature_count, nature_perc, month, metagame)
+                        VALUES %s
+                    """, smogon_natures_inserts)
 
 
 

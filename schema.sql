@@ -220,8 +220,8 @@ CREATE TABLE IF NOT EXISTS pokemon_abilities (
 DROP TABLE IF EXISTS pokemon_generations;
 CREATE TABLE IF NOT EXISTS pokemon_generations (
     pokemon_id INTEGER REFERENCES pokemon(pokemon_id),
-    version_group_id INTEGER REFERENCES version_groups(version_group_id),
-    PRIMARY KEY (pokemon_id, version_group_id)
+    generation_id INTEGER REFERENCES version_groups(version_group_id),
+    PRIMARY KEY (pokemon_id, generation_id)
 );
 
 
@@ -300,7 +300,7 @@ CREATE TABLE IF NOT EXISTS version_groups_generations (
 -- =========================
 -- Smogon Tables
 -- =========================
-/*DROP TABLE IF EXISTS pokemon_usage;*/
+DROP TABLE IF EXISTS pokemon_usage;
 CREATE TABLE IF NOT EXISTS pokemon_usage (
     pokemon_usage_id SERIAL PRIMARY KEY,
     pokemon_id INTEGER REFERENCES pokemon(pokemon_id),
@@ -314,7 +314,7 @@ CREATE TABLE IF NOT EXISTS pokemon_usage (
     month DATE
 );
 
-/*DROP TABLE IF EXISTS battle_formats;*/
+DROP TABLE IF EXISTS battle_formats;
 CREATE TABLE IF NOT EXISTS battle_formats (
     battle_format_id SERIAL PRIMARY KEY,
     full_metagame TEXT,
@@ -323,7 +323,7 @@ CREATE TABLE IF NOT EXISTS battle_formats (
     UNIQUE (name, cutoff)
 );
 
-/*DROP TABLE IF EXISTS monthly_stats;*/
+DROP TABLE IF EXISTS monthly_stats;
 CREATE TABLE IF NOT EXISTS monthly_stats (
     name TEXT,
     month DATE,
@@ -331,7 +331,7 @@ CREATE TABLE IF NOT EXISTS monthly_stats (
     UNIQUE (name, month)
 );
 
-/*DROP TABLE IF EXISTS smogon_items;*/
+DROP TABLE IF EXISTS smogon_items;
 CREATE TABLE IF NOT EXISTS smogon_items (
     smogon_item_id SERIAL PRIMARY KEY,
     pokemon_id INTEGER,
@@ -341,7 +341,7 @@ CREATE TABLE IF NOT EXISTS smogon_items (
     metagame TEXT
 );
 
-/*DROP TABLE IF EXISTS smogon_moves;*/
+DROP TABLE IF EXISTS smogon_moves;
 CREATE TABLE IF NOT EXISTS smogon_moves (
     smogon_move_id SERIAL PRIMARY KEY,
     pokemon_id INTEGER,
@@ -352,7 +352,7 @@ CREATE TABLE IF NOT EXISTS smogon_moves (
     metagame TEXT
 );
 
-/*DROP TABLE IF EXISTS smogon_teammates;*/
+DROP TABLE IF EXISTS smogon_teammates;
 CREATE TABLE IF NOT EXISTS smogon_teammates (
     smogon_teammate_id SERIAL PRIMARY KEY,
     pokemon_id INTEGER,
@@ -362,7 +362,7 @@ CREATE TABLE IF NOT EXISTS smogon_teammates (
     metagame TEXT
 );
 
-/*DROP TABLE IF EXISTS smogon_checks;*/
+DROP TABLE IF EXISTS smogon_checks;
 CREATE TABLE IF NOT EXISTS smogon_checks (
     smogon_check_id SERIAL PRIMARY KEY,
     pokemon_id INTEGER,
@@ -374,7 +374,7 @@ CREATE TABLE IF NOT EXISTS smogon_checks (
     metagame TEXT
 );
 
-/*DROP TABLE IF EXISTS smogon_abilities;*/
+DROP TABLE IF EXISTS smogon_abilities;
 CREATE TABLE IF NOT EXISTS smogon_abilities (
     smogon_ability_id SERIAL PRIMARY KEY,
     pokemon_id INTEGER,
@@ -385,7 +385,8 @@ CREATE TABLE IF NOT EXISTS smogon_abilities (
     metagame TEXT
 );
 
-CREATE TABLE IF NOT EXISTS smogon_tera (
+DROP TABLE IF EXISTS smogon_teras;
+CREATE TABLE IF NOT EXISTS smogon_teras (
     smogon_tera_id SERIAL PRIMARY KEY,
     pokemon_id INTEGER,
     type_id INTEGER,
@@ -394,6 +395,19 @@ CREATE TABLE IF NOT EXISTS smogon_tera (
     month DATE,
     metagame TEXT
 );
+
+DROP TABLE IF EXISTS smogon_natures;
+CREATE TABLE IF NOT EXISTS smogon_natures (
+    smogon_nature_id SERIAL PRIMARY KEY,
+    pokemon_id INTEGER,
+    nature_id INTEGER,
+    nature_count DOUBLE PRECISION,
+    nature_perc DOUBLE PRECISION,
+    month DATE,
+    metagame TEXT
+);
+
+
 
 
 DROP TABLE IF EXISTS sprites;
