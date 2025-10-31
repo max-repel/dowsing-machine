@@ -230,6 +230,8 @@ for month in months:
             smogon_teras_inserts = []
             smogon_natures_inserts = []
 
+            seen_pairs = set()
+
             for pokemon_name, pokemon_data in data["data"].items():
                 viability = pokemon_data["Viability Ceiling"]
                 players_used, gxe_top, gxe_99, gxe_95 = viability
@@ -280,7 +282,10 @@ for month in months:
                 # TERAS
                 if "Tera Types" in pokemon_data:
                     total_count = sum(pokemon_data["Tera Types"].values())
+
                     for type_name, type_count in pokemon_data["Tera Types"].items():
+                        if not type_name or type_name.lower() in ("nothing", "empty"):
+                            continue
                         type_id = type_cache.get(type_name)
                         type_perc = ((type_count/total_count) * 100)
                         smogon_teras_inserts.append((pokemon_id, type_id, type_count, type_perc, month, metagame))
@@ -316,15 +321,39 @@ for month in months:
                         smogon_moves_inserts.append((pokemon_id, move_id, move_count, move_perc, month, metagame))
 
                 # TEAMMATES
+                # if "Teammates" in pokemon_data:
+                #     for teammate_name, teammate_count in pokemon_data["Teammates"].items():
+                #         if not teammate_name or teammate_name.lower() == "empty" or teammate_count == 0:
+                #             continue
+                #         normalized_teammate = normalize_name(teammate_name)
+                #         if normalized_teammate in variants:
+                #             normalized_teammate = variants[normalized_teammate]
+                #         teammate_id = pokemon_cache.get(normalized_teammate)
+                #         smogon_teammates_inserts.append((pokemon_id, teammate_id, teammate_count, month, metagame))
+
+
+
                 if "Teammates" in pokemon_data:
                     for teammate_name, teammate_count in pokemon_data["Teammates"].items():
                         if not teammate_name or teammate_name.lower() == "empty" or teammate_count == 0:
                             continue
+
                         normalized_teammate = normalize_name(teammate_name)
                         if normalized_teammate in variants:
                             normalized_teammate = variants[normalized_teammate]
                         teammate_id = pokemon_cache.get(normalized_teammate)
-                        smogon_teammates_inserts.append((pokemon_id, teammate_id, teammate_count, month, metagame))
+
+                        if not teammate_id or teammate_id == pokemon_id:
+                            continue
+
+                        id1, id2 = sorted([pokemon_id, teammate_id])
+                        key = (id1, id2, month, metagame)
+
+                        if key in seen_pairs:
+                            continue
+                        seen_pairs.add(key)
+
+                        smogon_teammates_inserts.append((id1, id2, teammate_count, month, metagame))
 
                 # CHECKS
                 if "Checks and Counters" in pokemon_data:
