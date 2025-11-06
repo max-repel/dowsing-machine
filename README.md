@@ -29,12 +29,13 @@ These are the questions that I hope to be able to answer and visualize with this
 <!-- ROADMAP -->
 ## Roadmap
 
-- [ ] Clean and normalize all data from PokeAPI and Smogon and load into Postgres.
+- [ ] Clean and normalize all data from PokeAPI and Smogon and load into Postgres. Will use Postgres to clean and normalize data then use DuckDB for OLAP.
   - [X] Figure out how to associate pokemon with generation introduced, as this data is currently not in PokeAPI.
   - [ ] Efficiently deal with all of the small data inconsistencies in Smogon's data that piled up over the past decade like inconsistent naming and name changes especially within metagame formats. <-- Currently here
   - [ ] Optimize for faster loading. It is currently not as fast as I would like it to be. <-- Currently here
   - [X] Include sprites as base64 in the database for dashboarding later.
 - [ ] Dynamic dashboarding for each pokemon and its entire history of competitive usage based on Smogon data.
+  - [ ] Use a faster querying warehouse for perform analytics on many rows instead of Postgres.
 - [ ] Uncover insights with ML algs (Inference/Predictions)
 - [ ] Support for lightweight LLM trained on the entire dataset to generate SQL queries. (?)
 - [ ] Orchestrate new Smogon data each month using Airflow.
