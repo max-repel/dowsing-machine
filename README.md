@@ -29,7 +29,7 @@ These are the questions that I hope to be able to answer and visualize with this
 <!-- ROADMAP -->
 ## Roadmap
 
-- [ ] Clean and normalize all data from PokeAPI and Smogon and load into Postgres. Will use Postgres to clean and normalize data then use DuckDB for OLAP.
+- [ ] Clean and normalize all data from PokeAPI and Smogon and load into ~~Postgres~~ DuckDB for better OLAP performance. I was optimizing a primarily OLTP database this entire time...
   - [X] Figure out how to associate pokemon with generation introduced, as this data is currently not in PokeAPI.
   - [ ] Efficiently deal with all of the small data inconsistencies in Smogon's data that piled up over the past decade like inconsistent naming and name changes especially within metagame formats. <-- Currently here
   - [ ] Optimize for faster loading. It is currently not as fast as I would like it to be. <-- Currently here
