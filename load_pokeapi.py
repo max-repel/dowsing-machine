@@ -1,25 +1,16 @@
 import os
 import json
-import psycopg2
-from psycopg2.extras import execute_values
-from dotenv import load_dotenv
+import duckdb
+import pandas as pd
+from pathlib import Path
+
+PARQUET_DIR = Path("./parquet")
+PARQUET_DIR.mkdir(parents=True, exist_ok=True)
 
 
-# ENV
-load_dotenv()
-conn = psycopg2.connect(
-    dbname=os.getenv("PG_DBNAME"),
-    user=os.getenv("PG_USER"),
-    password=os.getenv("PG_PASSWORD"),
-    host=os.getenv("PG_HOST"),
-    port=os.getenv("PG_PORT")
-)
-
-# SCHEMA
-cur = conn.cursor()
-with open("schema.sql", "r", encoding="utf-8") as f:
-    cur.execute(f.read())
-
+DUCKDB_PATH = "dowsing-machine.duckdb"
+con = duckdb.connect(DUCKDB_PATH)
+cur = con.cursor()
 
 # Extractors
 def get_Pokemon(data): return (data["id"], data["name"], data["height"], data["weight"], data["base_experience"])
@@ -33,7 +24,6 @@ def get_Location_Area(data): return (data["id"], data["location"]["name"], data[
 def get_Item(data): return (data["id"], data["name"], data["cost"], data["fling_power"])
 def get_Natures(data): return (data["id"], data["name"], data["increased_stat"]["name"] if data["increased_stat"] else None, data["decreased_stat"]["name"] if data["decreased_stat"] else None)
 
-# TABLE CONFIG
 TABLE_CONFIG = [
     {"name": "pokemon", "path": "./PokeData/api/v2/pokemon", "columns": ["pokemon_id","name","height","weight","base_experience"], "extract": get_Pokemon},
     {"name": "species", "path": "./PokeData/api/v2/pokemon-species", "columns": ["species_id","name"], "extract": get_Id_Name},
@@ -73,11 +63,10 @@ TABLE_CONFIG = [
     {"name": "pokemon_types_def", "path": "./PokeData/api/v2/type", "columns": ["type_id","name"], "extract": get_Id_Name},
     {"name": "versions", "path": "./PokeData/api/v2/version", "columns": ["version_id","name"], "extract": get_Id_Name},
     {"name": "version_groups", "path": "./PokeData/api/v2/version-group", "columns": ["version_group_id","name", "order_num"], "extract": get_Version_Group}
-
 ]
 
-# Loader for single relations
-def load_table(cur, cfg):
+# loader for simple tables
+def load_table_to_parquet(cfg):
     rows = []
 
     for folder in os.listdir(cfg["path"]):
@@ -102,32 +91,25 @@ def load_table(cur, cfg):
             rows.extend(values)
 
     if rows:
-        columns_str = ", ".join(cfg["columns"])
-        query = f"INSERT INTO {cfg['name']} ({columns_str}) VALUES %s ON CONFLICT DO NOTHING"
-        execute_values(cur, query, rows)
+        df = pd.DataFrame(rows, columns=cfg["columns"])
+        # Check for duplicates
+        #df = df.drop_duplicates()
+        out_path = PARQUET_DIR / f"{cfg['name']}.parquet"
+        df.to_parquet(out_path, index=False)
 
-# Load
+        # create or replace a DuckDB view pointing to the parquet
+        con.execute(f"CREATE OR REPLACE VIEW {cfg['name']} AS SELECT * FROM read_parquet('{out_path.as_posix()}')")
+
+# Load loop
 for cfg in TABLE_CONFIG:
-    load_table(cur, cfg)
+    load_table_to_parquet(cfg)
+    print("done with ", cfg['name'])
 
-# Lists for execute_values
-ability_list = []
-type_list = []
-stat_list = []
-species_list = []
-move_list = []
-encounter_list = []
-egg_group_list = []
-move_type_list = []
-color_list = []
-shape_list = []
-version_groups_generations_list = []
-pokemon_generations_list = []
 
 def build_cache(cur, table_name, id_col, name_col="name"):
+    # Query the parquet-backed view in DuckDB
     cur.execute(f"SELECT {id_col}, {name_col} FROM {table_name}")
     return {name: _id for _id, name in cur.fetchall()}
-
 
 ability_cache = build_cache(cur, "abilities", "ability_id")
 type_cache = build_cache(cur, "pokemon_types_def", "type_id")
@@ -143,6 +125,20 @@ egg_group_cache = build_cache(cur, "egg_groups", "egg_group_id")
 color_cache = build_cache(cur, "colors", "color_id")
 shape_cache = build_cache(cur, "shapes", "shape_id")
 generation_cache = build_cache(cur, "generations", "generation_id")
+
+
+ability_list = []
+type_list = []
+stat_list = []
+species_list = []
+move_list = []
+encounter_list = []
+egg_group_list = []
+move_type_list = []
+color_list = []
+shape_list = []
+version_groups_generations_list = []
+pokemon_generations_list = []
 
 
 for folder in os.listdir("./PokeData/api/v2/pokemon"):
@@ -274,7 +270,6 @@ for folder in os.listdir("./PokeData/api/v2/move"):
     if type_id:
         move_type_list.append((move_id, type_id))
 
-
 # version_group_generations
 for folder in os.listdir("./PokeData/api/v2/generation"):
     folder_path = os.path.join("./PokeData/api/v2/generation", folder)
@@ -293,69 +288,31 @@ for folder in os.listdir("./PokeData/api/v2/generation"):
         vg_id = version_group_cache.get(vg_name)
         version_groups_generations_list.append((vg_id, generation_id))
 
-# Batch inserts
-execute_values(cur,
-    "INSERT INTO pokemon_abilities (pokemon_id, ability_id) VALUES %s ON CONFLICT DO NOTHING",
-    ability_list
-)
 
-execute_values(cur,
-    "INSERT INTO pokemon_types (pokemon_id, type_id) VALUES %s ON CONFLICT DO NOTHING",
-    type_list
-)
+def write_parquet_and_view(table_name, columns, rows):
+    if not rows:
+        return
+    df = pd.DataFrame(rows, columns=columns)
+    #df = df.drop_duplicates()
+    out_path = PARQUET_DIR / f"{table_name}.parquet"
+    df.to_parquet(out_path, index=False)
+    con.execute(f"CREATE OR REPLACE VIEW {table_name} AS SELECT * FROM read_parquet('{out_path.as_posix()}')")
 
-execute_values(cur,
-    "INSERT INTO pokemon_stats (pokemon_id, stat_id, value) VALUES %s ON CONFLICT DO NOTHING",
-    stat_list
-)
-
-execute_values(cur,
-    "INSERT INTO pokemon_species (pokemon_id, species_id) VALUES %s ON CONFLICT DO NOTHING",
-    species_list
-)
-
-execute_values(cur,
-    """INSERT INTO pokemon_moves
-       (pokemon_id, move_id, move_learn_method_id, version_group_id, level_learned_at)
-       VALUES %s ON CONFLICT DO NOTHING""",
-    move_list
-)
-
-execute_values(cur,
-    """INSERT INTO pokemon_encounters
-       (pokemon_id, version_id, location_area_id, encounter_method_id, min_level, max_level)
-       VALUES %s ON CONFLICT DO NOTHING""",
-    encounter_list
-)
-
-execute_values(cur,
-    "INSERT INTO species_egg_groups (species_id, egg_group_id) VALUES %s ON CONFLICT DO NOTHING",
-    egg_group_list
-)
-
-execute_values(cur,
-    "INSERT INTO move_types (move_id, type_id) VALUES %s ON CONFLICT DO NOTHING",
-    move_type_list
-)
-
-execute_values(cur,
-    "INSERT INTO species_colors (species_id, color_id) VALUES %s ON CONFLICT DO NOTHING",
-    color_list
-)
-
-execute_values(cur,
-    "INSERT INTO species_shapes (species_id, shape_id) VALUES %s ON CONFLICT DO NOTHING",
-    shape_list
-)
-
-execute_values(cur,
-    "INSERT INTO version_groups_generations (version_group_id, generation_id) VALUES %s ON CONFLICT DO NOTHING",
-    version_groups_generations_list
-)
-
-conn.commit()
+# write parquet + create view
+write_parquet_and_view("pokemon_abilities", ["pokemon_id", "ability_id"], ability_list)
+write_parquet_and_view("pokemon_types", ["pokemon_id", "type_id"], type_list)
+write_parquet_and_view("pokemon_stats", ["pokemon_id","stat_id","value"], stat_list)
+write_parquet_and_view("pokemon_species", ["pokemon_id","species_id"], species_list)
+write_parquet_and_view("pokemon_moves", ["pokemon_id","move_id","move_learn_method_id","version_group_id","level_learned_at"], move_list)
+write_parquet_and_view("pokemon_encounters", ["pokemon_id","version_id","location_area_id","encounter_method_id","min_level","max_level"], encounter_list)
+write_parquet_and_view("species_egg_groups", ["species_id","egg_group_id"], egg_group_list)
+write_parquet_and_view("move_types", ["move_id","type_id"], move_type_list)
+write_parquet_and_view("species_colors", ["species_id","color_id"], color_list)
+write_parquet_and_view("species_shapes", ["species_id","shape_id"], shape_list)
+write_parquet_and_view("version_groups_generations", ["version_group_id","generation_id"], version_groups_generations_list)
 
 
+con.commit()
 version_groups_generations_cache = build_cache(cur, "version_groups_generations", "generation_id", "version_group_id")
 print(version_groups_generations_cache)
 
@@ -373,7 +330,7 @@ for folder in os.listdir("./PokeData/api/v2/pokemon"):
     vg_set = set()
     pokemon_id = data["id"]
     if not data['moves']:
-        earliest_gen = 20
+        earliest_gen = 8
     else:
 
         for move in data['moves']:
@@ -387,17 +344,9 @@ for folder in os.listdir("./PokeData/api/v2/pokemon"):
     pokemon_generations_list.append((pokemon_id, earliest_gen))
 
 
-execute_values(cur,
-    "INSERT INTO pokemon_generations (pokemon_id, generation_id) VALUES %s ON CONFLICT DO NOTHING",
-    pokemon_generations_list
-)
+write_parquet_and_view("pokemon_generations", ["pokemon_id", "generation_id"], pokemon_generations_list)
+con.commit()
 
-
-
-conn.commit()
-cur.close()
-conn.close()
-
-
-
-
+con.close()
+print("Wrote parquet files to:", PARQUET_DIR.resolve())
+print("DuckDB database created:", DUCKDB_PATH)
