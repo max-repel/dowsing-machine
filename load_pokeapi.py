@@ -12,23 +12,37 @@ DUCKDB_PATH = "dowsing-machine.duckdb"
 con = duckdb.connect(DUCKDB_PATH)
 cur = con.cursor()
 
+def normalize_name(name):
+    # lowercase, replace spaces with hyphens, strip punctuation issues
+    name = name.lower()
+    name = name.replace(" ", "-")
+    name = name.replace("'", "")
+    name = name.replace(".", "")
+    name = name.replace("%", "")
+    name = name.replace(":", "")
+    name = name.replace("-", "")
+    if "--" in name:
+        name = name.split("--")[0]
+
+    return name
+
 # Extractors
-def get_Pokemon(data): return (data["id"], data["name"], data["height"], data["weight"], data["base_experience"])
-def get_Abilities(data): return (data["id"], data["name"], data["generation"]["name"])
-def get_Moves(data): return (data["id"], data["name"], data["generation"]["name"], data["power"], data["accuracy"], data["pp"], data["priority"])
+def get_Pokemon(data): return (data["id"], data["name"], data["height"], data["weight"], data["base_experience"], normalize_name(data["name"]))
+def get_Abilities(data): return (data["id"], data["name"], data["generation"]["name"], normalize_name(data["name"]))
+def get_Moves(data): return (data["id"], data["name"], data["generation"]["name"], data["power"], data["accuracy"], data["pp"], data["priority"], normalize_name(data["name"]))
 def get_Id_Name(data): return (data["id"], data["name"])
 def get_Evolution_Chain(data): return (data["id"], data["id"])
 def get_Machine(data): return (data["id"], data["item"]["name"], data["move"]["name"])
 def get_Version_Group(data): return (data["id"], data["name"], data["order"])
 def get_Location_Area(data): return (data["id"], data["location"]["name"], data["name"])
-def get_Item(data): return (data["id"], data["name"], data["cost"], data["fling_power"])
+def get_Item(data): return (data["id"], data["name"], data["cost"], data["fling_power"], normalize_name(data["name"]))
 def get_Natures(data): return (data["id"], data["name"], data["increased_stat"]["name"] if data["increased_stat"] else None, data["decreased_stat"]["name"] if data["decreased_stat"] else None)
 
 TABLE_CONFIG = [
-    {"name": "pokemon", "path": "./PokeData/api/v2/pokemon", "columns": ["pokemon_id","name","height","weight","base_experience"], "extract": get_Pokemon},
+    {"name": "pokemon", "path": "./PokeData/api/v2/pokemon", "columns": ["pokemon_id","name","height","weight","base_experience", "normalized_name"], "extract": get_Pokemon},
     {"name": "species", "path": "./PokeData/api/v2/pokemon-species", "columns": ["species_id","name"], "extract": get_Id_Name},
-    {"name": "abilities", "path": "./PokeData/api/v2/ability", "columns": ["ability_id","name","generation"], "extract": get_Abilities},
-    {"name": "moves", "path": "./PokeData/api/v2/move", "columns": ["move_id","name","generation","power","accuracy","pp","priority"], "extract": get_Moves},
+    {"name": "abilities", "path": "./PokeData/api/v2/ability", "columns": ["ability_id","name","generation", "normalized_name"], "extract": get_Abilities},
+    {"name": "moves", "path": "./PokeData/api/v2/move", "columns": ["move_id","name","generation","power","accuracy","pp","priority", "normalized_name"], "extract": get_Moves},
     {"name": "berries", "path": "./PokeData/api/v2/berry", "columns": ["berry_id","name"], "extract": get_Id_Name},
     {"name": "egg_groups", "path": "./PokeData/api/v2/egg-group", "columns": ["egg_group_id","name"], "extract": get_Id_Name},
     {"name": "encounter_conds", "path": "./PokeData/api/v2/encounter-condition", "columns": ["encounter_id","name"], "extract": get_Id_Name},
@@ -39,7 +53,7 @@ TABLE_CONFIG = [
     {"name": "genders", "path": "./PokeData/api/v2/gender", "columns": ["gender_id","name"], "extract": get_Id_Name},
     {"name": "generations", "path": "./PokeData/api/v2/generation", "columns": ["generation_id","name"], "extract": get_Id_Name},
     {"name": "growth_rates", "path": "./PokeData/api/v2/growth-rate", "columns": ["growth_rate_id","name"], "extract": get_Id_Name},
-    {"name": "items", "path": "./PokeData/api/v2/item", "columns": ["item_id","name", "cost", "fling_power"], "extract": get_Item},
+    {"name": "items", "path": "./PokeData/api/v2/item", "columns": ["item_id","name", "cost", "fling_power", "normalized_name"], "extract": get_Item},
     {"name": "item_attributes", "path": "./PokeData/api/v2/item-attribute", "columns": ["item_attribute_id","name"], "extract": get_Id_Name},
     {"name": "item_categories", "path": "./PokeData/api/v2/item-category", "columns": ["item_category_id","name"], "extract": get_Id_Name},
     {"name": "item_fling_effects", "path": "./PokeData/api/v2/item-fling-effect", "columns": ["item_fling_effect_id","name"], "extract": get_Id_Name},
@@ -106,10 +120,16 @@ for cfg in TABLE_CONFIG:
     print("done with ", cfg['name'])
 
 
-def build_cache(cur, table_name, id_col, name_col="name"):
-    # Query the parquet-backed view in DuckDB
-    cur.execute(f"SELECT {id_col}, {name_col} FROM {table_name}")
-    return {name: _id for _id, name in cur.fetchall()}
+# def build_cache(cur, table_name, id_col, name_col="name"):
+#     # Query the parquet-backed view in DuckDB
+#     cur.execute(f"SELECT {id_col}, {name_col} FROM {table_name}")
+#     return {name: _id for _id, name in cur.fetchall()}
+
+def build_cache(con, table_name, id_col, name_col="name"):
+    if con.execute(f"SELECT COUNT(*) FROM information_schema.tables WHERE table_name = '{table_name}'").fetchone()[0] == 0:
+        return {}
+    res = con.execute(f"SELECT {id_col}, {name_col} FROM {table_name}").fetchall()
+    return {name: _id for _id, name in res}
 
 ability_cache = build_cache(cur, "abilities", "ability_id")
 type_cache = build_cache(cur, "pokemon_types_def", "type_id")
@@ -297,6 +317,7 @@ def write_parquet_and_view(table_name, columns, rows):
     out_path = PARQUET_DIR / f"{table_name}.parquet"
     df.to_parquet(out_path, index=False)
     con.execute(f"CREATE OR REPLACE VIEW {table_name} AS SELECT * FROM read_parquet('{out_path.as_posix()}')")
+
 
 # write parquet + create view
 write_parquet_and_view("pokemon_abilities", ["pokemon_id", "ability_id"], ability_list)
