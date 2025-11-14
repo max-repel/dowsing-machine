@@ -1,27 +1,56 @@
-import os
+import duckdb
 import json
-import sqlite3
-import pandas as pd
-import gzip
 from pathlib import Path
-import psycopg2
-from psycopg2.extras import execute_values
-from dotenv import load_dotenv
+import pandas as pd
+import requests
+from bs4 import BeautifulSoup
+from datetime import datetime
+import re
 
 
-load_dotenv()
+# --- Config ---
+PARQUET_DIR = Path("./parquet")
+PARQUET_DIR.mkdir(exist_ok=True)
 
-conn = psycopg2.connect(
-    dbname=os.getenv("PG_DBNAME"),
-    user=os.getenv("PG_USER"),
-    password=os.getenv("PG_PASSWORD"),
-    host=os.getenv("PG_HOST"),
-    port=os.getenv("PG_PORT")
-)
-cur = conn.cursor()
+months = ["2014-11"]  # example month
+tiers = ["ou", "uu", "ru", "nu", "pu", "zu", "vgc", "double", "ubers", "mono", "1v1"]
 
-with open("schema.sql", "r", encoding="utf-8") as f:
-    cur.execute(f.read())
+# --- DuckDB connection ---
+con = duckdb.connect("dowsing-machine.duckdb")
+
+# --- Helper functions ---
+def normalize_name(name):
+    name = name.lower().replace(" ", "-").replace("'", "").replace(".", "").replace("%", "").replace(":", "")
+    if "--" in name:
+        name = name.split("--")[0]
+    return name
+
+# Get list of all available months
+BASE_URL = "https://www.smogon.com/stats/"
+
+# def fetch_smogon_months():
+#     url = "https://www.smogon.com/stats/"
+#     resp = requests.get(url)
+#     resp.raise_for_status()
+
+#     soup = BeautifulSoup(resp.text, "html.parser")
+
+#     months = []
+
+#     # Smogon lists folders as <a href="2020-06/">2020-06/</a>
+#     for link in soup.find_all("a"):
+#         href = link.get("href", "")
+#         # months always end with "/"
+#         if href.endswith("/") and href[0].isdigit():
+#             # remove trailing slash
+#             months.append(href[:-1])
+
+#     return months
+
+
+# months = fetch_smogon_months()
+# print(months)
+months = ['2025-08', '2025-09']
 
 variants = {
     "indeedee": "indeedee-male",
@@ -130,310 +159,208 @@ item_variants = {
     "mail" : "likemail"
 }
 
-def normalize_name(name):
-    # lowercase, replace spaces with hyphens, strip punctuation issues
-    name = name.lower()
-    name = name.replace(" ", "-")
-    name = name.replace("'", "")
-    name = name.replace(".", "")
-    name = name.replace("%", "")
-    name = name.replace(":", "")
-    if "--" in name:
-        name = name.split("--")[0]
-
-    return name
-
-# for file in os.listdir("./SmogonData/2025-09/chaos/gen9ou-0.json"):
-#     json_path = os.path.join("./SmogonData/2025-09/chaos", file)
-#     with open(json_path, "r", encoding="utf-8") as f:
-#         data = json.load(f)
-#     print(data["info"]["metagame"])
-
-def build_cache(cur, table_name, id_col, name_col="name"):
-    cur.execute(f"SELECT {id_col}, {name_col} FROM {table_name}")
-    return {name: _id for _id, name in cur.fetchall()}
+def build_cache(con, table_name, id_col, name_col="name"):
+    if con.execute(f"SELECT COUNT(*) FROM information_schema.tables WHERE table_name = '{table_name}'").fetchone()[0] == 0:
+        return {}
+    res = con.execute(f"SELECT {id_col}, {name_col} FROM {table_name}").fetchall()
+    return {name: _id for _id, name in res}
 
 
-pokemon_cache = build_cache(cur, "pokemon", "pokemon_id")
-item_cache = build_cache(cur, "items", "item_id", "normalized_name")
-move_cache = build_cache(cur, "moves", "move_id", "normalized_name")
-ability_cache = build_cache(cur, "abilities", "ability_id", "normalized_name")
-type_cache = build_cache(cur, "pokemon_types_def", "type_id")
-nature_cache = build_cache(cur, "natures", "nature_id")
+def write_table(name, columns, rows, month_str=None):
+    if not rows:
+        return
 
 
-months = ["2025-09"]
+    if month_str is None:
+        month_str = datetime.now().strftime("%Y-%m")
 
 
-missed_pokemon = []
-missed_moves = []
-missed_items = []
-missed_abilities = []
+    month_folder = PARQUET_DIR / month_str
+    month_folder.mkdir(parents=True, exist_ok=True)
+
+    df = pd.DataFrame(rows, columns=columns)
 
 
+    path = month_folder / f"{name}.parquet"
+    df.to_parquet(path, index=False)
+
+
+    con.execute(
+        f"CREATE OR REPLACE VIEW {name} AS SELECT * FROM read_parquet('{path.as_posix()}')"
+    )
+
+
+pokemon_cache = build_cache(con, "pokemon", "pokemon_id")
+item_cache = build_cache(con, "items", "item_id", "normalized_name")
+move_cache = build_cache(con, "moves", "move_id", "normalized_name")
+ability_cache = build_cache(con, "abilities", "ability_id", "normalized_name")
+type_cache = build_cache(con, "pokemon_types_def", "type_id")
+nature_cache = build_cache(con, "natures", "nature_id")
+
+
+
+BASE_URL = "https://www.smogon.com/stats"
 
 for month in months:
 
-    print("starting ", month)
+    battle_formats_rows = []
+    monthly_stats_rows = []
+    pokemon_usage_rows = []
+    smogon_abilities_rows = []
+    smogon_items_rows = []
+    smogon_moves_rows = []
+    smogon_teammates_rows = []
+    smogon_teras_rows = []
+    smogon_natures_rows = []
+    smogon_checks_rows = []
+
+    battle_formats_dict = {}
+
+    print("Processing month:", month)
     data_dir = Path(f"./SmogonData/{month}/chaos/")
-    month = month + "-01"
+    month_date = month + "-01"
 
     for json_file in data_dir.glob("*.json"):
-
-        if "cap" in json_file.name.lower() or "metronome" in json_file.name.lower():
-            print(f"Skipping file: {json_file.name}")
+        print(json_file)
+        fname = json_file.name.lower()
+        if "cap" in fname or "metronome" in fname:
             continue
-        if not any(tier in json_file.name.lower() for tier in ["ou", "uu", "ru", "nu", "pu", "zu", "vgc", "double", "ubers", "mono", "1v1"]):
-            print(f"Skipping file: {json_file.name}")
+        if not any(tier in fname for tier in tiers):
             continue
 
-        print(f"{json_file.name}")
         with open(json_file, "r", encoding="utf-8") as f:
             data = json.load(f)
-            metagame = data['info']['metagame']
-            cutoff = str(int(data['info']['cutoff']))
-            num_battles = data['info']['number of battles']
 
-            full_metagame = metagame + '-' + cutoff
+        # Battle format
+        metagame = data['info']['metagame']
+        cutoff = str(int(data['info']['cutoff']))
+        full_metagame = f"{metagame}-{cutoff}"
+        num_battles = data['info']['number of battles']
 
-            # battle_formats insert
-            cur.execute("""
-                INSERT INTO battle_formats (full_metagame, name, cutoff)
-                VALUES (%s, %s, %s)
-                ON CONFLICT (name, cutoff) DO NOTHING
-            """, (full_metagame, metagame, cutoff))
+        if full_metagame not in battle_formats_dict:
+            battle_format_id = len(battle_formats_dict) + 1
+            battle_formats_dict[full_metagame] = battle_format_id
+            battle_formats_rows.append((battle_format_id, full_metagame, metagame, cutoff))
+        else:
+            battle_format_id = battle_formats_dict[full_metagame]
 
-            # monthly_stats insert
-            cur.execute("""
-                INSERT INTO monthly_stats (name, month, num_battles)
-                VALUES (%s, %s, %s)
-                ON CONFLICT (name, month) DO NOTHING
-            """, (metagame, month, num_battles))
+        monthly_stats_rows.append((full_metagame, month_date, num_battles))
 
-            # Retrieve metagame_id
-            cur.execute("SELECT battle_format_id FROM battle_formats WHERE full_metagame = %s", (full_metagame,))
-            result = cur.fetchone()
-            if not result:
-                print("could not find ", full_metagame)
-                continue
-            metagame_id = result[0]
+        seen_pairs = set()
 
-            metagame = metagame + '-' + cutoff
+        for pokemon_name, pokemon_data in data["data"].items():
+            normalized = normalize_name(pokemon_name)
+            if normalized in variants:
+                normalized = variants[normalized]
+            pokemon_id = pokemon_cache.get(normalized)
 
-            # Initialize all insert lists
-            pokemon_usage_inserts = []
-            smogon_abilities_inserts = []
-            smogon_items_inserts = []
-            smogon_moves_inserts = []
-            smogon_teammates_inserts = []
-            smogon_checks_inserts = []
-            smogon_teras_inserts = []
-            smogon_natures_inserts = []
+            # Pokemon usage
+            viability = pokemon_data["Viability Ceiling"]
+            players_used, gxe_top, gxe_99, gxe_95 = viability
+            raw_count = pokemon_data.get('Raw count')
+            usage_percent = pokemon_data.get('usage')
+            if usage_percent is not None:
+                usage_percent *= 100
+            else:
+                usage_percent = (raw_count / (num_battles * 2)) * 100
 
-            seen_pairs = set()
+            pokemon_usage_rows.append(
+                (pokemon_id, raw_count, usage_percent, players_used, gxe_top, gxe_99, gxe_95, battle_format_id, month_date)
+            )
 
-            for pokemon_name, pokemon_data in data["data"].items():
-                viability = pokemon_data["Viability Ceiling"]
-                players_used, gxe_top, gxe_99, gxe_95 = viability
-                normalized = normalize_name(pokemon_name)
-                if normalized in variants:
-                    normalized = variants[normalized]
+            # Abilities
+            if "Abilities" in pokemon_data:
+                total_count = sum(pokemon_data["Abilities"].values())
+                for ability_name, ability_count in pokemon_data["Abilities"].items():
+                    ability_id = ability_cache.get(ability_name)
+                    ability_perc = (ability_count / total_count) * 100 if total_count else 0
+                    smogon_abilities_rows.append(
+                        (pokemon_id, ability_id, ability_count, ability_perc, month_date, full_metagame)
+                    )
 
-                pokemon_id = pokemon_cache.get(normalized)
-                raw_count = pokemon_data.get('Raw count')
-                usage_percent = pokemon_data.get('usage')
-                if usage_percent is not None:
-                    usage_percent *= 100
-                else:
-                    usage_percent = (raw_count / (num_battles * 2)) * 100
+            # Items
+            if "Items" in pokemon_data:
+                for item_name, item_count in pokemon_data["Items"].items():
+                    if item_name in item_variants:
+                        item_name = item_variants[item_name]
+                    item_id = item_cache.get(item_name)
+                    smogon_items_rows.append((pokemon_id, item_id, item_count, month_date, full_metagame))
 
-                pokemon_usage_inserts.append(
-                    (pokemon_id, raw_count, usage_percent, players_used, gxe_top, gxe_99, gxe_95, metagame_id, month)
-                )
+            # Moves
+            if "Moves" in pokemon_data:
+                total_count = sum(pokemon_data["Moves"].values())
+                for move_name, move_count in pokemon_data["Moves"].items():
+                    move_id = move_cache.get(move_name)
+                    move_perc = (move_count / (total_count / 4)) * 100 if total_count else 0
+                    smogon_moves_rows.append((pokemon_id, move_id, move_count, move_perc, month_date, full_metagame))
 
-                if pokemon_id is None and normalized not in missed_pokemon:
-                    missed_pokemon.append(normalized)
+            # Teammates
+            if "Teammates" in pokemon_data:
+                for teammate_name, teammate_count in pokemon_data["Teammates"].items():
+                    normalized_teammate = normalize_name(teammate_name)
+                    if normalized_teammate in variants:
+                        normalized_teammate = variants[normalized_teammate]
+                    teammate_id = pokemon_cache.get(normalized_teammate)
+                    if not teammate_id or teammate_id == pokemon_id or not pokemon_id:
+                        continue
+                    id1, id2 = sorted([pokemon_id, teammate_id])
+                    key = (id1, id2, month_date, full_metagame)
+                    if key in seen_pairs:
+                        continue
+                    seen_pairs.add(key)
+                    smogon_teammates_rows.append((id1, id2, teammate_count, month_date, full_metagame))
 
-                # ABILITIES
-                if "Abilities" in pokemon_data:
-                    total_count = sum(pokemon_data["Abilities"].values())
-                    for ability_name, ability_count in pokemon_data["Abilities"].items():
-                        if not ability_name or ability_name.lower() in ("noability") or ability_count == 0:
-                            ability_id = 0
-                        else:
-                            ability_id = ability_cache.get(ability_name)
-                        if ability_id is None and ability_name not in missed_abilities:
-                            missed_abilities.append(ability_name)
-                        ability_perc = (ability_count / total_count) * 100
-                        smogon_abilities_inserts.append((pokemon_id, ability_id, ability_count, ability_perc, month, metagame))
+            # Tera types
+            if "Tera Types" in pokemon_data:
+                total_count = sum(pokemon_data["Tera Types"].values())
+                for type_name, type_count in pokemon_data["Tera Types"].items():
+                    type_id = type_cache.get(type_name)
+                    type_perc = (type_count / total_count) * 100 if total_count else 0
+                    smogon_teras_rows.append((pokemon_id, type_id, type_count, type_perc, month_date, full_metagame))
 
-                # ITEMS
-                if "Items" in pokemon_data:
-                    for item_name, item_count in pokemon_data["Items"].items():
-                        if item_name in item_variants:
-                            item_name = item_variants[item_name]
-                        if not item_name or item_name.lower() in ("nothing", "empty") or item_count == 0:
-                            continue
-                        item_id = item_cache.get(item_name)
-                        if item_id is None and item_name not in missed_items:
-                            missed_items.append(item_name)
-                        smogon_items_inserts.append((pokemon_id, item_id, item_count, month, metagame))
+            # Natures
+            if "Spreads" in pokemon_data:
+                nature_counts = {}
+                for spread, count in pokemon_data["Spreads"].items():
+                    nature = spread.split(":")[0]
+                    nature_counts[nature] = nature_counts.get(nature, 0) + count
+                total_count = sum(nature_counts.values())
+                for nature_name, nature_count in nature_counts.items():
+                    nature_id = nature_cache.get(normalize_name(nature_name))
+                    nature_perc = (nature_count / total_count) * 100 if total_count else 0
+                    smogon_natures_rows.append((pokemon_id, nature_id, nature_count, nature_perc, month_date, full_metagame))
 
-                # TERAS
-                if "Tera Types" in pokemon_data:
-                    total_count = sum(pokemon_data["Tera Types"].values())
+            # Checks
+            if "Checks and Counters" in pokemon_data:
+                for check_name, check_arr in pokemon_data["Checks and Counters"].items():
+                    check_id = pokemon_cache.get(normalize_name(check_name))
+                    check_count, check_perc, check_sd = check_arr
+                    check_perc *= 100
+                    smogon_checks_rows.append((pokemon_id, check_id, check_count, check_perc, check_sd, month_date, full_metagame))
 
-                    for type_name, type_count in pokemon_data["Tera Types"].items():
-                        if not type_name or type_name.lower() in ("nothing", "empty"):
-                            continue
-                        type_id = type_cache.get(type_name)
-                        type_perc = ((type_count/total_count) * 100)
-                        smogon_teras_inserts.append((pokemon_id, type_id, type_count, type_perc, month, metagame))
-
-                # NATURES
-                if "Spreads" in pokemon_data:
-                    nature_counts = {}
-                    for spread, count in pokemon_data["Spreads"].items():
-                        nature = spread.split(":")[0]  # e.g. "Bold" from "Bold:252/0/252/0/4/0"
-                        nature_counts[nature] = nature_counts.get(nature, 0) + count
-
-
-                    total_count = sum(nature_counts.values())
-                    for nature_name, nature_count in nature_counts.items():
-                        nature_name = normalize_name(nature_name)
-                        nature_id = nature_cache.get(nature_name)
-                        nature_perc = (nature_count / total_count) * 100
-
-                        smogon_natures_inserts.append((pokemon_id, nature_id, nature_count, nature_perc, month, metagame))
-
-                # MOVES
-                if "Moves" in pokemon_data:
-                    total_count = sum(pokemon_data["Moves"].values())
-                    for move_name, move_count in pokemon_data["Moves"].items():
-                        if not move_name or move_name.lower() == "" or move_count == 0:
-                            continue
-                        if move_name == 'visegrip':
-                            move_name = 'vicegrip'
-                        move_id = move_cache.get(move_name)
-                        if move_id is None and move_name not in missed_moves:
-                            missed_moves.append(move_name)
-                        move_perc = (move_count / (total_count / 4)) * 100
-                        smogon_moves_inserts.append((pokemon_id, move_id, move_count, move_perc, month, metagame))
-
-                # TEAMMATES
-                # if "Teammates" in pokemon_data:
-                #     for teammate_name, teammate_count in pokemon_data["Teammates"].items():
-                #         if not teammate_name or teammate_name.lower() == "empty" or teammate_count == 0:
-                #             continue
-                #         normalized_teammate = normalize_name(teammate_name)
-                #         if normalized_teammate in variants:
-                #             normalized_teammate = variants[normalized_teammate]
-                #         teammate_id = pokemon_cache.get(normalized_teammate)
-                #         smogon_teammates_inserts.append((pokemon_id, teammate_id, teammate_count, month, metagame))
+# --- Write tables to Parquet and create DuckDB views ---
+# def write_table(name, columns, rows):
+#     if not rows:
+#         return
+#     df = pd.DataFrame(rows, columns=columns)
+#     path = PARQUET_DIR / f"{name}.parquet"
+#     df.to_parquet(path, index=False)
+#     con.execute(f"CREATE OR REPLACE VIEW {name} AS SELECT * FROM read_parquet('{path.as_posix()}')")
 
 
 
-                if "Teammates" in pokemon_data:
-                    for teammate_name, teammate_count in pokemon_data["Teammates"].items():
-                        if not teammate_name or teammate_name.lower() == "empty" or teammate_count == 0:
-                            continue
-
-                        normalized_teammate = normalize_name(teammate_name)
-                        if normalized_teammate in variants:
-                            normalized_teammate = variants[normalized_teammate]
-                        teammate_id = pokemon_cache.get(normalized_teammate)
-
-                        if not teammate_id or teammate_id == pokemon_id:
-                            continue
-
-                        id1, id2 = sorted([pokemon_id, teammate_id])
-                        key = (id1, id2, month, metagame)
-
-                        if key in seen_pairs:
-                            continue
-                        seen_pairs.add(key)
-
-                        smogon_teammates_inserts.append((id1, id2, teammate_count, month, metagame))
-
-                # CHECKS
-                if "Checks and Counters" in pokemon_data:
-                    for check_name, check_arr in pokemon_data["Checks and Counters"].items():
-                        if not check_name or check_name.lower() == "empty":
-                            continue
-                        normalized_check = normalize_name(check_name)
-                        if normalized_check in variants:
-                            normalized_check = variants[normalized_check]
-                        check_id = pokemon_cache.get(normalized_check)
-                        check_count, check_perc, check_sd = check_arr
-                        check_perc *= 100
-                        smogon_checks_inserts.append((pokemon_id, check_id, check_count, check_perc, check_sd, month, metagame))
-
-            # Single batch inserts per table per month
-            with conn:
-                if pokemon_usage_inserts:
-                    execute_values(cur, """
-                        INSERT INTO pokemon_usage
-                        (pokemon_id, raw_count, usage_percent, players_used, gxe_top, gxe_99, gxe_95, metagame_id, month)
-                        VALUES %s
-                    """, pokemon_usage_inserts)
-
-                if smogon_abilities_inserts:
-                    execute_values(cur, """
-                        INSERT INTO smogon_abilities
-                        (pokemon_id, ability_id, ability_count, ability_perc, month, metagame)
-                        VALUES %s
-                    """, smogon_abilities_inserts)
-
-                if smogon_items_inserts:
-                    execute_values(cur, """
-                        INSERT INTO smogon_items
-                        (pokemon_id, item_id, item_count, month, metagame)
-                        VALUES %s
-                    """, smogon_items_inserts)
-
-                if smogon_moves_inserts:
-                    execute_values(cur, """
-                        INSERT INTO smogon_moves
-                        (pokemon_id, move_id, move_count, move_perc, month, metagame)
-                        VALUES %s
-                    """, smogon_moves_inserts)
-
-                if smogon_teammates_inserts:
-                    execute_values(cur, """
-                        INSERT INTO smogon_teammates
-                        (pokemon_id, teammate_id, teammate_count, month, metagame)
-                        VALUES %s
-                    """, smogon_teammates_inserts)
-
-                if smogon_checks_inserts:
-                    execute_values(cur, """
-                        INSERT INTO smogon_checks
-                        (pokemon_id, check_id, check_count, check_perc, check_sd, month, metagame)
-                        VALUES %s
-                    """, smogon_checks_inserts)
-
-                if smogon_teras_inserts:
-                    execute_values(cur, """
-                        INSERT INTO smogon_teras
-                        (pokemon_id, type_id, type_count, type_perc, month, metagame)
-                        VALUES %s
-                    """, smogon_teras_inserts)
-
-                if smogon_natures_inserts:
-                    execute_values(cur, """
-                        INSERT INTO smogon_natures
-                        (pokemon_id, nature_id, nature_count, nature_perc, month, metagame)
-                        VALUES %s
-                    """, smogon_natures_inserts)
 
 
+    write_table("battle_formats", ["battle_format_id", "full_metagame", "name", "cutoff"], battle_formats_rows, month)
+    write_table("monthly_stats", ["full_metagame", "month", "num_battles"], monthly_stats_rows, month)
+    write_table("pokemon_usage", ["pokemon_id","raw_count","usage_percent","players_used","gxe_top","gxe_99","gxe_95","battle_format_id","month"], pokemon_usage_rows, month)
+    write_table("smogon_abilities", ["pokemon_id","ability_id","ability_count","ability_perc","month","metagame"], smogon_abilities_rows, month)
+    write_table("smogon_items", ["pokemon_id","item_id","item_count","month","metagame"], smogon_items_rows, month)
+    write_table("smogon_moves", ["pokemon_id","move_id","move_count","move_perc","month","metagame"], smogon_moves_rows, month)
+    write_table("smogon_teammates", ["pokemon_id","teammate_id","teammate_count","month","metagame"], smogon_teammates_rows, month)
+    write_table("smogon_teras", ["pokemon_id","type_id","type_count","type_perc","month","metagame"], smogon_teras_rows, month)
+    write_table("smogon_natures", ["pokemon_id","nature_id","nature_count","nature_perc","month","metagame"], smogon_natures_rows, month)
+    write_table("smogon_checks", ["pokemon_id","check_id","check_count","check_perc","check_sd","month","metagame"], smogon_checks_rows, month)
 
-print("missed abilities", missed_abilities)
-print("missed moves", missed_moves)
-print("missed items", missed_items)
 
-conn.commit()
-conn.close()
-
-
-
+print("All data ingested into DuckDB and Parquet views!")
