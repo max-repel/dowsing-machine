@@ -28,24 +28,21 @@ def normalize_name(name):
 # Get list of all available months
 BASE_URL = "https://www.smogon.com/stats/"
 
-# def fetch_smogon_months():
-#     url = "https://www.smogon.com/stats/"
-#     resp = requests.get(url)
-#     resp.raise_for_status()
+def fetch_smogon_months():
+    url = "https://www.smogon.com/stats/"
+    resp = requests.get(url)
+    resp.raise_for_status()
 
-#     soup = BeautifulSoup(resp.text, "html.parser")
+    soup = BeautifulSoup(resp.text, "html.parser")
 
-#     months = []
+    months = []
 
-#     # Smogon lists folders as <a href="2020-06/">2020-06/</a>
-#     for link in soup.find_all("a"):
-#         href = link.get("href", "")
-#         # months always end with "/"
-#         if href.endswith("/") and href[0].isdigit():
-#             # remove trailing slash
-#             months.append(href[:-1])
+    for link in soup.find_all("a"):
+        href = link.get("href", "")
+        if href.endswith("/") and href[0].isdigit():
+            months.append(href[:-1])
 
-#     return months
+    return months
 
 
 # months = fetch_smogon_months()
