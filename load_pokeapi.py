@@ -3,6 +3,8 @@ import json
 import duckdb
 import pandas as pd
 from pathlib import Path
+import orjson
+
 
 PARQUET_DIR = Path("./parquet")
 PARQUET_DIR.mkdir(parents=True, exist_ok=True)

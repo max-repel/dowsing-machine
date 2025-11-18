@@ -52,7 +52,7 @@ def build_cache(con, table_name, id_col, name_col="name"):
 
 
 # My own list of months to test smaller data
-months = ['2015-01', '2016-01', '2017-01', '2018-01', '2019-01', '2020-01', '2021-01', '2022-01', '2023-01', '2024-01', '2025-01']
+months = ['2015-01']
 
 variants = {
     "indeedee": "indeedee-male",
@@ -309,6 +309,9 @@ def process_jsons(month, json_files_data):
 
         # Battle format
         metagame = data['info']['metagame']
+        if not metagame.startswith("gen"):
+            metagame = "gen6" + metagame
+
         generation = get_generation_from_metagame(metagame)
 
         cutoff = str(int(data['info']['cutoff']))
@@ -362,10 +365,7 @@ def process_jsons(month, json_files_data):
             if "Abilities" in pokemon_data:
                 total_count = sum(pokemon_data["Abilities"].values())
                 for ability_name, ability_count in pokemon_data["Abilities"].items():
-                    if not ability_name or ability_name.lower() in ("noability") or ability_count == 0:
-                        ability_id = 0
-                    else:
-                        ability_id = ability_cache.get(ability_name)
+                    ability_id = ability_cache.get(ability_name)
                     if not ability_id:
                         missed_abilities.add(ability_name)
                     ability_perc = (ability_count / total_count) * 100 if total_count else 0
@@ -375,6 +375,7 @@ def process_jsons(month, json_files_data):
 
             # Items
             if "Items" in pokemon_data:
+                total_count = sum(pokemon_data["Items"].values())
                 for item_name, item_count in pokemon_data["Items"].items():
                     if item_name in item_variants:
                         item_name = item_variants[item_name]
@@ -383,7 +384,8 @@ def process_jsons(month, json_files_data):
                     item_id = item_cache.get(item_name)
                     if item_id is None and item_name not in missed_items:
                         missed_items.add(item_name)
-                    smogon_items_rows.append((pokemon_id, item_id, item_count, month_date, full_metagame))
+                    item_perc = (item_count / total_count) * 100 if total_count else 0
+                    smogon_items_rows.append((pokemon_id, item_id, item_count, item_perc, month_date, full_metagame))
 
             # Moves
             if "Moves" in pokemon_data:
@@ -453,7 +455,7 @@ def process_jsons(month, json_files_data):
     write_table("monthly_stats", ["full_metagame", "month", "num_battles"], monthly_stats_rows, month)
     write_table("pokemon_usage", ["pokemon_id","raw_count","usage_percent","players_used","gxe_top","gxe_99","gxe_95","battle_format_id","month"], pokemon_usage_rows, month)
     write_table("smogon_abilities", ["pokemon_id","ability_id","ability_count","ability_perc","month","metagame"], smogon_abilities_rows, month)
-    write_table("smogon_items", ["pokemon_id","item_id","item_count","month","metagame"], smogon_items_rows, month)
+    write_table("smogon_items", ["pokemon_id","item_id","item_count","item_perc","month","metagame"], smogon_items_rows, month)
     write_table("smogon_moves", ["pokemon_id","move_id","move_count","move_perc","month","metagame"], smogon_moves_rows, month)
     write_table("smogon_teammates", ["pokemon_id","teammate_id","teammate_count","month","metagame"], smogon_teammates_rows, month)
     write_table("smogon_teras", ["pokemon_id","type_id","type_count","type_perc","month","metagame"], smogon_teras_rows, month)
