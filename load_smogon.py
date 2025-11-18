@@ -6,27 +6,25 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 import re
+import orjson
+import aiohttp
+import asyncio
+from urllib.parse import urljoin
 
 
-# --- Config ---
 PARQUET_DIR = Path("./parquet")
 PARQUET_DIR.mkdir(exist_ok=True)
+BASE_URL = "https://www.smogon.com/stats/"
 
-months = ["2014-11"]  # example month
 tiers = ["ou", "uu", "ru", "nu", "pu", "zu", "vgc", "double", "ubers", "mono", "1v1"]
-
-# --- DuckDB connection ---
 con = duckdb.connect("dowsing-machine.duckdb")
 
-# --- Helper functions ---
+# Helpers
 def normalize_name(name):
     name = name.lower().replace(" ", "-").replace("'", "").replace(".", "").replace("%", "").replace(":", "")
     if "--" in name:
         name = name.split("--")[0]
     return name
-
-# Get list of all available months
-BASE_URL = "https://www.smogon.com/stats/"
 
 def fetch_smogon_months():
     url = "https://www.smogon.com/stats/"
@@ -45,9 +43,16 @@ def fetch_smogon_months():
     return months
 
 
-# months = fetch_smogon_months()
-# print(months)
-months = ['2025-08', '2025-09']
+def build_cache(con, table_name, id_col, name_col="name"):
+    if con.execute(f"SELECT COUNT(*) FROM information_schema.tables WHERE table_name = '{table_name}'").fetchone()[0] == 0:
+        return {}
+    res = con.execute(f"SELECT {id_col}, {name_col} FROM {table_name}").fetchall()
+    return {name: _id for _id, name in res}
+
+
+
+# My own list of months to test smaller data
+months = ['2015-01', '2016-01', '2017-01', '2018-01', '2019-01', '2020-01', '2021-01', '2022-01', '2023-01', '2024-01', '2025-01']
 
 variants = {
     "indeedee": "indeedee-male",
@@ -153,39 +158,43 @@ item_variants = {
     "iceberry" : "rawstberry",
     "burntberry" : "aspearberry",
     "berry" : "oranberry",
-    "mail" : "likemail"
+    "mail" : "likemail",
+    'psychiumz': 'psychiumzheld',
+    'decidiumz': 'decidiumzheld',
+    'pikashuniumz': 'pikashuniumzheld',
+    'normaliumz': 'normaliumzheld',
+    'flyiniumz': 'flyiniumzheld',
+    'fairiumz': 'fairiumzheld',
+    'marshadiumz': 'marshadiumzheld',
+    'eeviumz': 'eeviumzheld',
+    'pikaniumz': 'pikaniumzheld',
+    'wateriumz': 'wateriumzheld',
+    'electriumz': 'electriumzheld',
+    'ghostiumz': 'ghostiumzheld',
+    'grassiumz': 'grassiumzheld',
+    'buginiumz': 'buginiumzheld',
+    'iciumz': 'iciumzheld',
+    'mewniumz': 'mewniumzheld',
+    'inciniumz': 'inciniumzheld',
+    'rockiumz': 'rockiumzheld',
+    'fightiniumz': 'fightiniumzheld',
+    'poisoniumz': 'poisoniumzheld',
+    'mimikiumz': 'mimikiumzheld',
+    'firiumz': 'firiumzheld',
+    'aloraichiumz': 'aloraichiumzheld',
+    'tapuniumz': 'tapuniumzheld',
+    'lycaniumz': 'lycaniumzheld',
+    'snorliumz': 'snorliumzheld',
+    'primariumz': 'primariumzheld',
+    'lunaliumz': 'lunaliumzheld',
+    'kommoniumz': 'kommoniumzheld',
+    'groundiumz': 'groundiumzheld',
+    'steeliumz': 'steeliumzheld',
+    'solganiumz': 'solganiumzheld',
+    'darkiniumz': 'darkiniumzheld',
+    'ultranecroziumz': 'ultranecroziumzheld',
+    'dragoniumz': 'dragoniumzheld'
 }
-
-def build_cache(con, table_name, id_col, name_col="name"):
-    if con.execute(f"SELECT COUNT(*) FROM information_schema.tables WHERE table_name = '{table_name}'").fetchone()[0] == 0:
-        return {}
-    res = con.execute(f"SELECT {id_col}, {name_col} FROM {table_name}").fetchall()
-    return {name: _id for _id, name in res}
-
-
-def write_table(name, columns, rows, month_str=None):
-    if not rows:
-        return
-
-
-    if month_str is None:
-        month_str = datetime.now().strftime("%Y-%m")
-
-
-    month_folder = PARQUET_DIR / month_str
-    month_folder.mkdir(parents=True, exist_ok=True)
-
-    df = pd.DataFrame(rows, columns=columns)
-
-
-    path = month_folder / f"{name}.parquet"
-    df.to_parquet(path, index=False)
-
-
-    con.execute(
-        f"CREATE OR REPLACE VIEW {name} AS SELECT * FROM read_parquet('{path.as_posix()}')"
-    )
-
 
 pokemon_cache = build_cache(con, "pokemon", "pokemon_id")
 item_cache = build_cache(con, "items", "item_id", "normalized_name")
@@ -194,12 +203,86 @@ ability_cache = build_cache(con, "abilities", "ability_id", "normalized_name")
 type_cache = build_cache(con, "pokemon_types_def", "type_id")
 nature_cache = build_cache(con, "natures", "nature_id")
 
+# Writer for parquet folders
+def write_table(name, columns, rows, month_str):
+
+    if not rows:
+        return
+
+    table_folder = PARQUET_DIR / name
+    table_folder.mkdir(parents=True, exist_ok=True)
+
+    df = pd.DataFrame(rows, columns=columns)
+
+    # File is named by month (2025-01.parquet)
+    path = table_folder / f"{month_str}.parquet"
+
+    df.to_parquet(path, index=False)
+
+    # Create a view that reads ALL monthly parquet files for this table
+    con.execute(
+        f"""
+        CREATE OR REPLACE VIEW {name} AS
+        SELECT * FROM read_parquet('{(table_folder / "*.parquet").as_posix()}');
+        """
+    )
 
 
-BASE_URL = "https://www.smogon.com/stats"
 
-for month in months:
+# Async json get
+async def get_json_file_urls(month):
+    base = f"https://www.smogon.com/stats/{month}/chaos/"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(base) as resp:
+            resp.raise_for_status()
+            html = await resp.text()
+    soup = BeautifulSoup(html, "html.parser")
+    urls = []
+    for a in soup.find_all("a", href=True):
+        href = a["href"].lower()
+        if not href.endswith(".json"):
+            continue
+        if "cap" in href or "metronome" in href or "random" in href or "challenge" in href or "hack" in href or "custom" in href:
+            continue
+        if not any(tier in href for tier in tiers):
+            continue
+        urls.append(urljoin(base, a["href"]))
+    return urls
 
+async def fetch_json(session, url):
+    try:
+        async with session.get(url) as resp:
+            resp.raise_for_status()
+            content = await resp.read()
+            return url, orjson.loads(content)
+    except Exception as e:
+        print(f"Error fetching {url}: {e}")
+        return url, None
+
+async def fetch_month_jsons(month, max_concurrent=20):
+    urls = await get_json_file_urls(month)
+    semaphore = asyncio.Semaphore(max_concurrent)
+    results = []
+
+    async with aiohttp.ClientSession() as session:
+        async def sem_fetch(url):
+            async with semaphore:
+                return await fetch_json(session, url)
+
+        tasks = [sem_fetch(url) for url in urls]
+        for future in asyncio.as_completed(tasks):
+            url, data = await future
+            results.append((url, data))
+            print(f"[{len(results)}/{len(urls)}] Fetched {url}")
+
+    return results
+
+def get_generation_from_metagame(metagame):
+    m = re.match(r"gen(\d+)", metagame.lower())
+    return int(m.group(1)) if m else 6
+
+# Load each month
+def process_jsons(month, json_files_data):
     battle_formats_rows = []
     monthly_stats_rows = []
     pokemon_usage_rows = []
@@ -210,26 +293,24 @@ for month in months:
     smogon_teras_rows = []
     smogon_natures_rows = []
     smogon_checks_rows = []
+    monthly_stats_seen = set()
 
     battle_formats_dict = {}
-
-    print("Processing month:", month)
-    data_dir = Path(f"./SmogonData/{month}/chaos/")
     month_date = month + "-01"
 
-    for json_file in data_dir.glob("*.json"):
-        print(json_file)
-        fname = json_file.name.lower()
-        if "cap" in fname or "metronome" in fname:
-            continue
-        if not any(tier in fname for tier in tiers):
-            continue
+    missed_pokemon = set()
+    missed_items = set()
+    missed_abilities = set()
+    missed_moves = set()
 
-        with open(json_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
+    for url, data in json_files_data:
+        if data is None:
+            continue
 
         # Battle format
         metagame = data['info']['metagame']
+        generation = get_generation_from_metagame(metagame)
+
         cutoff = str(int(data['info']['cutoff']))
         full_metagame = f"{metagame}-{cutoff}"
         num_battles = data['info']['number of battles']
@@ -237,12 +318,16 @@ for month in months:
         if full_metagame not in battle_formats_dict:
             battle_format_id = len(battle_formats_dict) + 1
             battle_formats_dict[full_metagame] = battle_format_id
-            battle_formats_rows.append((battle_format_id, full_metagame, metagame, cutoff))
+            battle_formats_rows.append((battle_format_id, full_metagame, metagame, cutoff, generation))
         else:
             battle_format_id = battle_formats_dict[full_metagame]
 
-        monthly_stats_rows.append((full_metagame, month_date, num_battles))
 
+        if metagame not in monthly_stats_seen:
+            monthly_stats_rows.append((metagame, month_date, num_battles))
+            monthly_stats_seen.add(metagame)
+
+        # Set to remove duplicates from inverse entries for smogon_teammates
         seen_pairs = set()
 
         for pokemon_name, pokemon_data in data["data"].items():
@@ -251,9 +336,17 @@ for month in months:
                 normalized = variants[normalized]
             pokemon_id = pokemon_cache.get(normalized)
 
+            if not pokemon_id:
+                missed_pokemon.add(normalized)
             # Pokemon usage
-            viability = pokemon_data["Viability Ceiling"]
-            players_used, gxe_top, gxe_99, gxe_95 = viability
+
+            if "Viability Ceiling" in pokemon_data:
+
+                viability = pokemon_data["Viability Ceiling"]
+                players_used, gxe_top, gxe_99, gxe_95 = viability
+            else:
+                viability = [0,0,0,0]
+                players_used, gxe_top, gxe_99, gxe_95 = viability
             raw_count = pokemon_data.get('Raw count')
             usage_percent = pokemon_data.get('usage')
             if usage_percent is not None:
@@ -269,7 +362,12 @@ for month in months:
             if "Abilities" in pokemon_data:
                 total_count = sum(pokemon_data["Abilities"].values())
                 for ability_name, ability_count in pokemon_data["Abilities"].items():
-                    ability_id = ability_cache.get(ability_name)
+                    if not ability_name or ability_name.lower() in ("noability") or ability_count == 0:
+                        ability_id = 0
+                    else:
+                        ability_id = ability_cache.get(ability_name)
+                    if not ability_id:
+                        missed_abilities.add(ability_name)
                     ability_perc = (ability_count / total_count) * 100 if total_count else 0
                     smogon_abilities_rows.append(
                         (pokemon_id, ability_id, ability_count, ability_perc, month_date, full_metagame)
@@ -280,15 +378,25 @@ for month in months:
                 for item_name, item_count in pokemon_data["Items"].items():
                     if item_name in item_variants:
                         item_name = item_variants[item_name]
+                    if not item_name or item_name.lower() in ("nothing", "empty", "berserkgene", "metalalloy") or item_count == 0:
+                        continue
                     item_id = item_cache.get(item_name)
+                    if item_id is None and item_name not in missed_items:
+                        missed_items.add(item_name)
                     smogon_items_rows.append((pokemon_id, item_id, item_count, month_date, full_metagame))
 
             # Moves
             if "Moves" in pokemon_data:
                 total_count = sum(pokemon_data["Moves"].values())
                 for move_name, move_count in pokemon_data["Moves"].items():
+                    if not move_name or move_name.lower() == "" or move_count == 0:
+                        continue
+                    if move_name == 'visegrip':
+                        move_name = 'vicegrip'
                     move_id = move_cache.get(move_name)
-                    move_perc = (move_count / (total_count / 4)) * 100 if total_count else 0
+                    if move_id is None and move_name not in missed_moves:
+                        missed_moves.add(move_name)
+                    move_perc = (move_count / (total_count / 4)) * 100
                     smogon_moves_rows.append((pokemon_id, move_id, move_count, move_perc, month_date, full_metagame))
 
             # Teammates
@@ -330,25 +438,18 @@ for month in months:
             # Checks
             if "Checks and Counters" in pokemon_data:
                 for check_name, check_arr in pokemon_data["Checks and Counters"].items():
-                    check_id = pokemon_cache.get(normalize_name(check_name))
+                    if not check_name or check_name.lower() == "empty":
+                        continue
+                    normalized_check = normalize_name(check_name)
+                    if normalized_check in variants:
+                        normalized_check = variants[normalized_check]
+                    check_id = pokemon_cache.get(normalized_check)
                     check_count, check_perc, check_sd = check_arr
                     check_perc *= 100
                     smogon_checks_rows.append((pokemon_id, check_id, check_count, check_perc, check_sd, month_date, full_metagame))
 
-# --- Write tables to Parquet and create DuckDB views ---
-# def write_table(name, columns, rows):
-#     if not rows:
-#         return
-#     df = pd.DataFrame(rows, columns=columns)
-#     path = PARQUET_DIR / f"{name}.parquet"
-#     df.to_parquet(path, index=False)
-#     con.execute(f"CREATE OR REPLACE VIEW {name} AS SELECT * FROM read_parquet('{path.as_posix()}')")
-
-
-
-
-
-    write_table("battle_formats", ["battle_format_id", "full_metagame", "name", "cutoff"], battle_formats_rows, month)
+    # Writer
+    write_table("battle_formats", ["battle_format_id", "full_metagame", "name", "cutoff", "generation"], battle_formats_rows, month)
     write_table("monthly_stats", ["full_metagame", "month", "num_battles"], monthly_stats_rows, month)
     write_table("pokemon_usage", ["pokemon_id","raw_count","usage_percent","players_used","gxe_top","gxe_99","gxe_95","battle_format_id","month"], pokemon_usage_rows, month)
     write_table("smogon_abilities", ["pokemon_id","ability_id","ability_count","ability_perc","month","metagame"], smogon_abilities_rows, month)
@@ -359,5 +460,17 @@ for month in months:
     write_table("smogon_natures", ["pokemon_id","nature_id","nature_count","nature_perc","month","metagame"], smogon_natures_rows, month)
     write_table("smogon_checks", ["pokemon_id","check_id","check_count","check_perc","check_sd","month","metagame"], smogon_checks_rows, month)
 
+    # Check data that I missed
+    print("missed pokemon: ", missed_pokemon)
+    print("missed items: ", missed_items)
+    print("missed abilities", missed_abilities)
+    print("missed moves", missed_moves)
 
-print("All data ingested into DuckDB and Parquet views!")
+async def main(months):
+    for month in months:
+        print(f"\nProcessing month: {month}")
+        json_files_data = await fetch_month_jsons(month)
+        process_jsons(month, json_files_data)
+
+# Run main
+asyncio.run(main(months))
