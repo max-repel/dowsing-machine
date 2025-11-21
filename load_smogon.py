@@ -14,10 +14,29 @@ from urllib.parse import urljoin
 
 PARQUET_DIR = Path("./parquet")
 PARQUET_DIR.mkdir(exist_ok=True)
-BASE_URL = "https://www.smogon.com/stats/"
 
+BASE_URL = "https://www.smogon.com/stats/"
 tiers = ["ou", "uu", "ru", "nu", "pu", "zu", "vgc", "double", "ubers", "mono", "1v1"]
 con = duckdb.connect("dowsing-machine.duckdb")
+
+
+con.execute("DROP SEQUENCE IF EXISTS seq_metagame;")
+con.execute("CREATE SEQUENCE IF NOT EXISTS seq_metagame START WITH 1;")
+
+con.execute("""
+DROP TABLE IF EXISTS metagames;
+""")
+
+# Create table
+con.execute("""
+CREATE TABLE IF NOT EXISTS metagames (
+    metagame_id INTEGER PRIMARY KEY DEFAULT NEXTVAL('seq_metagame'),
+    full_metagame TEXT UNIQUE,
+    metagame TEXT,
+    generation INTEGER,
+    cutoff INTEGER
+);
+""")
 
 # Helpers
 def normalize_name(name):
@@ -52,7 +71,8 @@ def build_cache(con, table_name, id_col, name_col="name"):
 
 
 # My own list of months to test smaller data
-months = ['2015-01']
+# months = ['2015-01', '2016-01', '2017-01', '2018-01', '2019-01', '2020-01', '2021-01', '2022-01', '2023-01', '2024-01', '2025-01']
+months = ['2015-01', '2015-02']
 
 variants = {
     "indeedee": "indeedee-male",
@@ -278,8 +298,54 @@ async def fetch_month_jsons(month, max_concurrent=20):
     return results
 
 def get_generation_from_metagame(metagame):
-    m = re.match(r"gen(\d+)", metagame.lower())
+    m = re.match(r"gen([1-9])", metagame.lower())
     return int(m.group(1)) if m else 6
+
+def get_or_create_metagame_id(con, full_metagame, metagame, cutoff, generation):
+
+    # row = con.execute(
+    #     "SELECT metagame_id FROM metagames WHERE full_metagame = ?",
+    #     [full_metagame],
+    # ).fetchone()
+
+    # if row is not None:
+    #     return row[0]
+
+    # new_id = con.execute("SELECT nextval('seq_metagame')").fetchone()[0]
+    # con.execute(
+    #     """
+    #     INSERT INTO metagames_test (metagame_id, full_metagame, metagame, cutoff, generation)
+    #     VALUES (?, ?, ?, ?, ?)
+    #     """,
+    #     [new_id, full_metagame, metagame, cutoff, generation],
+    # )
+
+    # return new_id
+    row = con.execute(
+        "SELECT metagame_id FROM metagames WHERE full_metagame = ?",
+        [full_metagame],
+    ).fetchone()
+
+    if row:
+        return row[0]
+
+    try:
+        con.execute("""
+            INSERT INTO metagames (full_metagame, metagame, cutoff, generation)
+            VALUES (?, ?, ?, ?)
+        """, [full_metagame, metagame, cutoff, generation])
+    except Exception:
+        # Another thread inserted it at the same moment
+        pass
+
+    row = con.execute("""
+        SELECT metagame_id FROM metagames WHERE full_metagame = ?
+    """, [full_metagame]).fetchone()
+
+    return row[0]
+
+
+
 
 # Load each month
 def process_jsons(month, json_files_data):
@@ -318,16 +384,22 @@ def process_jsons(month, json_files_data):
         full_metagame = f"{metagame}-{cutoff}"
         num_battles = data['info']['number of battles']
 
-        if full_metagame not in battle_formats_dict:
-            battle_format_id = len(battle_formats_dict) + 1
-            battle_formats_dict[full_metagame] = battle_format_id
-            battle_formats_rows.append((battle_format_id, full_metagame, metagame, cutoff, generation))
-        else:
-            battle_format_id = battle_formats_dict[full_metagame]
+        # if full_metagame not in battle_formats_dict:
+        #     battle_format_id = len(battle_formats_dict) + 1
+        #     battle_formats_dict[full_metagame] = battle_format_id
+        #     battle_formats_rows.append((battle_format_id, full_metagame, metagame, cutoff, generation))
+        # else:
+        #     battle_format_id = battle_formats_dict[full_metagame]
 
+
+        # if metagame not in monthly_stats_seen:
+        #     monthly_stats_rows.append((metagame, month_date, num_battles))
+        #     monthly_stats_seen.add(metagame)
+
+        metagame_id = get_or_create_metagame_id(con, full_metagame, metagame, cutoff, generation)
 
         if metagame not in monthly_stats_seen:
-            monthly_stats_rows.append((metagame, month_date, num_battles))
+            monthly_stats_rows.append((metagame_id, metagame, month_date, num_battles))
             monthly_stats_seen.add(metagame)
 
         # Set to remove duplicates from inverse entries for smogon_teammates
@@ -358,7 +430,7 @@ def process_jsons(month, json_files_data):
                 usage_percent = (raw_count / (num_battles * 2)) * 100
 
             pokemon_usage_rows.append(
-                (pokemon_id, raw_count, usage_percent, players_used, gxe_top, gxe_99, gxe_95, battle_format_id, month_date)
+                (pokemon_id, raw_count, usage_percent, players_used, gxe_top, gxe_99, gxe_95, metagame_id, month_date)
             )
 
             # Abilities
@@ -370,7 +442,7 @@ def process_jsons(month, json_files_data):
                         missed_abilities.add(ability_name)
                     ability_perc = (ability_count / total_count) * 100 if total_count else 0
                     smogon_abilities_rows.append(
-                        (pokemon_id, ability_id, ability_count, ability_perc, month_date, full_metagame)
+                        (pokemon_id, ability_id, ability_count, ability_perc, month_date, full_metagame, metagame_id)
                     )
 
             # Items
@@ -385,7 +457,7 @@ def process_jsons(month, json_files_data):
                     if item_id is None and item_name not in missed_items:
                         missed_items.add(item_name)
                     item_perc = (item_count / total_count) * 100 if total_count else 0
-                    smogon_items_rows.append((pokemon_id, item_id, item_count, item_perc, month_date, full_metagame))
+                    smogon_items_rows.append((pokemon_id, item_id, item_count, item_perc, month_date, full_metagame, metagame_id))
 
             # Moves
             if "Moves" in pokemon_data:
@@ -399,7 +471,7 @@ def process_jsons(month, json_files_data):
                     if move_id is None and move_name not in missed_moves:
                         missed_moves.add(move_name)
                     move_perc = (move_count / (total_count / 4)) * 100
-                    smogon_moves_rows.append((pokemon_id, move_id, move_count, move_perc, month_date, full_metagame))
+                    smogon_moves_rows.append((pokemon_id, move_id, move_count, move_perc, month_date, full_metagame, metagame_id))
 
             # Teammates
             if "Teammates" in pokemon_data:
@@ -415,7 +487,7 @@ def process_jsons(month, json_files_data):
                     if key in seen_pairs:
                         continue
                     seen_pairs.add(key)
-                    smogon_teammates_rows.append((id1, id2, teammate_count, month_date, full_metagame))
+                    smogon_teammates_rows.append((id1, id2, teammate_count, month_date, full_metagame, metagame_id))
 
             # Tera types
             if "Tera Types" in pokemon_data:
@@ -423,7 +495,7 @@ def process_jsons(month, json_files_data):
                 for type_name, type_count in pokemon_data["Tera Types"].items():
                     type_id = type_cache.get(type_name)
                     type_perc = (type_count / total_count) * 100 if total_count else 0
-                    smogon_teras_rows.append((pokemon_id, type_id, type_count, type_perc, month_date, full_metagame))
+                    smogon_teras_rows.append((pokemon_id, type_id, type_count, type_perc, month_date, full_metagame, metagame_id))
 
             # Natures
             if "Spreads" in pokemon_data:
@@ -435,7 +507,7 @@ def process_jsons(month, json_files_data):
                 for nature_name, nature_count in nature_counts.items():
                     nature_id = nature_cache.get(normalize_name(nature_name))
                     nature_perc = (nature_count / total_count) * 100 if total_count else 0
-                    smogon_natures_rows.append((pokemon_id, nature_id, nature_count, nature_perc, month_date, full_metagame))
+                    smogon_natures_rows.append((pokemon_id, nature_id, nature_count, nature_perc, month_date, full_metagame, metagame_id))
 
             # Checks
             if "Checks and Counters" in pokemon_data:
@@ -448,19 +520,20 @@ def process_jsons(month, json_files_data):
                     check_id = pokemon_cache.get(normalized_check)
                     check_count, check_perc, check_sd = check_arr
                     check_perc *= 100
-                    smogon_checks_rows.append((pokemon_id, check_id, check_count, check_perc, check_sd, month_date, full_metagame))
+                    smogon_checks_rows.append((pokemon_id, check_id, check_count, check_perc, check_sd, month_date, full_metagame, metagame_id))
 
     # Writer
-    write_table("battle_formats", ["battle_format_id", "full_metagame", "name", "cutoff", "generation"], battle_formats_rows, month)
-    write_table("monthly_stats", ["full_metagame", "month", "num_battles"], monthly_stats_rows, month)
-    write_table("pokemon_usage", ["pokemon_id","raw_count","usage_percent","players_used","gxe_top","gxe_99","gxe_95","battle_format_id","month"], pokemon_usage_rows, month)
-    write_table("smogon_abilities", ["pokemon_id","ability_id","ability_count","ability_perc","month","metagame"], smogon_abilities_rows, month)
-    write_table("smogon_items", ["pokemon_id","item_id","item_count","item_perc","month","metagame"], smogon_items_rows, month)
-    write_table("smogon_moves", ["pokemon_id","move_id","move_count","move_perc","month","metagame"], smogon_moves_rows, month)
-    write_table("smogon_teammates", ["pokemon_id","teammate_id","teammate_count","month","metagame"], smogon_teammates_rows, month)
-    write_table("smogon_teras", ["pokemon_id","type_id","type_count","type_perc","month","metagame"], smogon_teras_rows, month)
-    write_table("smogon_natures", ["pokemon_id","nature_id","nature_count","nature_perc","month","metagame"], smogon_natures_rows, month)
-    write_table("smogon_checks", ["pokemon_id","check_id","check_count","check_perc","check_sd","month","metagame"], smogon_checks_rows, month)
+
+    #write_table("battle_formats", ["battle_format_id", "full_metagame", "name", "cutoff", "generation"], battle_formats_rows, month)
+    write_table("monthly_stats", ["metagame_id","metagame", "month", "num_battles"], monthly_stats_rows, month)
+    write_table("pokemon_usage", ["pokemon_id","raw_count","usage_percent","players_used","gxe_top","gxe_99","gxe_95","metagame_id","month"], pokemon_usage_rows, month)
+    write_table("smogon_abilities", ["pokemon_id","ability_id","ability_count","ability_perc","month","metagame","metagame_id"], smogon_abilities_rows, month)
+    write_table("smogon_items", ["pokemon_id","item_id","item_count","item_perc","month","metagame","metagame_id"], smogon_items_rows, month)
+    write_table("smogon_moves", ["pokemon_id","move_id","move_count","move_perc","month","metagame","metagame_id"], smogon_moves_rows, month)
+    write_table("smogon_teammates", ["pokemon_id","teammate_id","teammate_count","month","metagame","metagame_id"], smogon_teammates_rows, month)
+    write_table("smogon_teras", ["pokemon_id","type_id","type_count","type_perc","month","metagame","metagame_id"], smogon_teras_rows, month)
+    write_table("smogon_natures", ["pokemon_id","nature_id","nature_count","nature_perc","month","metagame","metagame_id"], smogon_natures_rows, month)
+    write_table("smogon_checks", ["pokemon_id","check_id","check_count","check_perc","check_sd","month","metagame","metagame_id"], smogon_checks_rows, month)
 
     # Check data that I missed
     print("missed pokemon: ", missed_pokemon)
