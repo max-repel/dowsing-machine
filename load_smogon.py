@@ -20,12 +20,13 @@ tiers = ["ou", "uu", "ru", "nu", "pu", "zu", "vgc", "double", "ubers", "mono", "
 con = duckdb.connect("dowsing-machine.duckdb")
 
 
-con.execute("DROP SEQUENCE IF EXISTS seq_metagame;")
-con.execute("CREATE SEQUENCE IF NOT EXISTS seq_metagame START WITH 1;")
+# con.execute("DROP SEQUENCE IF EXISTS seq_metagame;")
+# con.execute("""
+# DROP TABLE IF EXISTS metagames;
+# """)
+# quit()
 
-con.execute("""
-DROP TABLE IF EXISTS metagames;
-""")
+con.execute("CREATE SEQUENCE IF NOT EXISTS seq_metagame START WITH 1;")
 
 # Create table
 con.execute("""
@@ -71,8 +72,11 @@ def build_cache(con, table_name, id_col, name_col="name"):
 
 
 # My own list of months to test smaller data
-# months = ['2015-01', '2016-01', '2017-01', '2018-01', '2019-01', '2020-01', '2021-01', '2022-01', '2023-01', '2024-01', '2025-01']
-months = ['2015-01', '2015-02']
+# months = ['2015-01', '2015-06', '2016-01', '2016-06', '2017-01', '2017-06', '2018-01', '2018-06', '2019-01', '2019-06',
+# '2020-01', '2020-06', '2021-01', '2021-06', '2022-01', '2022-06', '2023-01', '2023-06', '2024-01', '2024-06', '2025-01', '2025-06']
+
+months = fetch_smogon_months()
+
 
 variants = {
     "indeedee": "indeedee-male",
@@ -246,6 +250,7 @@ def write_table(name, columns, rows, month_str):
         SELECT * FROM read_parquet('{(table_folder / "*.parquet").as_posix()}');
         """
     )
+
 
 
 
