@@ -1,22 +1,20 @@
 import base64
 import os
-import psycopg2
 import re
-from dotenv import load_dotenv
+import duckdb
 
+conn = duckdb.connect("dowsing-machine.duckdb")
 
-load_dotenv()
-conn = psycopg2.connect(
-    dbname=os.getenv("PG_DBNAME"),
-    user=os.getenv("PG_USER"),
-    password=os.getenv("PG_PASSWORD"),
-    host=os.getenv("PG_HOST"),
-    port=os.getenv("PG_PORT")
+conn.execute("""
+DROP TABLE IF EXISTS sprites
+""")
+conn.execute("""
+CREATE TABLE IF NOT EXISTS sprites (
+    sprite_id INTEGER,
+    sprite_name TEXT,
+    sprite_data TEXT
 )
-
-cur = conn.cursor()
-with open("schema.sql", "r", encoding="utf-8") as f:
-    cur.execute(f.read())
+""")
 
 
 folder = "./pokesprites"
@@ -28,8 +26,8 @@ for filename in os.listdir(folder):
         path = os.path.join(folder, filename)
         with open(path, "rb") as image_file:
             base64_string = base64.b64encode(image_file.read()).decode("utf-8")
-        cur.execute(
-            "INSERT INTO sprites (sprite_id, sprite_name, sprite_data) VALUES (%s, %s, %s)",
+        conn.execute(
+            "INSERT INTO sprites (sprite_id, sprite_name, sprite_data) VALUES (?, ?, ?)",
             (sprite_id, filename, base64_string)
         )
 conn.commit()
