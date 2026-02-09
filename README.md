@@ -47,4 +47,5 @@ Visuals coming soonTM.
 
 Some early experimental dashboards (WIP)
 <img width="1180" height="656" alt="image" src="https://github.com/user-attachments/assets/d9baa973-9169-488d-86de-cfc5ceca0bb6" />
+<img width="1176" height="655" alt="image" src="https://github.com/user-attachments/assets/373ce174-aad0-4221-8d6d-6b272b7ce9bc" />
 
