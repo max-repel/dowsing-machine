@@ -44,3 +44,7 @@ These are the questions that I hope to be able to answer and visualize with this
 
 
 Visuals coming soonTM.
+
+Some early experimental dashboards (WIP)
+<img width="1180" height="656" alt="image" src="https://github.com/user-attachments/assets/d9baa973-9169-488d-86de-cfc5ceca0bb6" />
+
