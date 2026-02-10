@@ -336,7 +336,7 @@ CREATE TABLE IF NOT EXISTS smogon_items (
     smogon_item_id SERIAL PRIMARY KEY,
     pokemon_id INTEGER,
     item_id INTEGER,
-    item_count INTEGER,
+    item_count DOUBLE PRECISION,
     month DATE,
     metagame TEXT
 );

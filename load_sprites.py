@@ -19,15 +19,32 @@ CREATE TABLE IF NOT EXISTS sprites (
 
 folder = "./pokesprites"
 
+first_base64 = None
+
+
 for filename in os.listdir(folder):
-    if filename.endswith(".png") and filename[:-4].isdigit() and not filename == '0.png':
+    if filename.endswith(".png") and filename[:-4].isdigit() and filename != "0.png":
         match = re.fullmatch(r"(\d+)\.png", filename)
         sprite_id = int(match.group(1))
         path = os.path.join(folder, filename)
+
         with open(path, "rb") as image_file:
             base64_string = base64.b64encode(image_file.read()).decode("utf-8")
+
+            full_uri = f"data:image/png;base64,{base64_string}"
+
+            if first_base64 is None:
+                first_base64 = full_uri
+
         conn.execute(
             "INSERT INTO sprites (sprite_id, sprite_name, sprite_data) VALUES (?, ?, ?)",
-            (sprite_id, filename, base64_string)
+            (sprite_id, filename, full_uri)
         )
+
 conn.commit()
+
+
+tables = conn.execute("SHOW TABLES").fetchall()
+print(tables)
+
+print(first_base64)
