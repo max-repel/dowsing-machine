@@ -53,4 +53,3 @@ This is the history of Great Tusk's stats in the gen9-ou 0 ELO cutoff. (No elo r
 This is the history of Great Tusk's stats in the gen9-ou 1825 ELO cutoff. (1825 ELO and higher)
 <img width="1171" height="656" alt="image" src="https://github.com/user-attachments/assets/1f27047e-b924-4709-aae6-4b119bd6690a" />
 
-
