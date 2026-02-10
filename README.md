@@ -46,9 +46,8 @@ These are the questions that I hope to be able to answer and visualize with this
 Visuals coming soonTM.
 
 Some early experimental dashboards (WIP)
-<img width="1180" height="656" alt="image" src="https://github.com/user-attachments/assets/d9baa973-9169-488d-86de-cfc5ceca0bb6" />
-<img width="1176" height="655" alt="image" src="https://github.com/user-attachments/assets/373ce174-aad0-4221-8d6d-6b272b7ce9bc" />
 
 <img width="1174" height="652" alt="image" src="https://github.com/user-attachments/assets/db4b1c87-530a-4a6e-b847-281381b608f3" />
+<img width="1171" height="656" alt="image" src="https://github.com/user-attachments/assets/1f27047e-b924-4709-aae6-4b119bd6690a" />
 
 
