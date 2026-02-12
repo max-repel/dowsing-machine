@@ -47,9 +47,11 @@ Visuals coming soonTM.
 
 Some early experimental dashboards (WIP)
 
-This is the history of Great Tusk's stats in the gen9-ou 0 ELO cutoff. (No elo restrictions)
-<img width="1174" height="652" alt="image" src="https://github.com/user-attachments/assets/db4b1c87-530a-4a6e-b847-281381b608f3" />
+This is the history of Dragonite's stats in the gen9-ou 0 ELO cutoff. (No elo restrictions)
+<img width="1166" height="655" alt="image" src="https://github.com/user-attachments/assets/489bebc9-316b-4d4d-ad5b-7e6c90600966" />
 
-This is the history of Great Tusk's stats in the gen9-ou 1825 ELO cutoff. (1825 ELO and higher)
-<img width="1171" height="656" alt="image" src="https://github.com/user-attachments/assets/1f27047e-b924-4709-aae6-4b119bd6690a" />
+
+This is the history of Dragonite's stats in the gen9-ou 1825 ELO cutoff. (1825 ELO and higher)
+<img width="1165" height="654" alt="image" src="https://github.com/user-attachments/assets/fd2ec524-fbb3-4507-a399-12f5666c7cfa" />
+
 
