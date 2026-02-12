@@ -54,6 +54,10 @@ This is the history of Dragonite's stats in the gen9-ou 0 ELO cutoff. (No elo re
 This is the history of Dragonite's stats in the gen9-ou 1825 ELO cutoff. (1825 ELO and higher)
 <img width="1165" height="654" alt="image" src="https://github.com/user-attachments/assets/fd2ec524-fbb3-4507-a399-12f5666c7cfa" />
 
+The history of a Golduck stats in the gen6ou 0 ELO cutoff. (No elo restriction)
+<img width="1163" height="653" alt="image" src="https://github.com/user-attachments/assets/d8e6d63b-8984-4d4c-af30-3cc5876fe966" />
+
+
 
 Now that I'm able to use my database to create aggregate data for any pokemon and metagame, I want to use my database to dynamically show timeseries data
-such as how the usage of certain pokemon changed over time given certain metagames. Or how the tera types of certain pokemon changed with meta changes.
+such as how the usage of certain pokemon changed over time given certain metagames. Or how the tera types of certain pokemon changed with meta changes. Currently working on this.
