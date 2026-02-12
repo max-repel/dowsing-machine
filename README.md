@@ -31,11 +31,10 @@ These are the questions that I hope to be able to answer and visualize with this
 
 - [X] Clean and normalize all data from PokeAPI and Smogon and load into ~~Postgres~~ DuckDB for better OLAP performance. I was optimizing a primarily OLTP database this entire time...
   - [X] Figure out how to associate pokemon with generation introduced, as this data is currently not in PokeAPI.
-  - [X] Efficiently deal with all of the small data inconsistencies in Smogon's data that piled up over the past decade like inconsistent naming and name changes especially within metagame formats. <-- Currently here
-  - [X] Optimize for faster loading. It is currently not as fast as I would like it to be. <-- Currently here
+  - [X] Efficiently deal with all of the small data inconsistencies in Smogon's data that piled up over the past decade like inconsistent naming and name changes especially within metagame formats.
   - [X] Include sprites as base64 in the database for dashboarding later.
 - [X] Dynamic dashboarding for each pokemon and its entire history of competitive usage based on Smogon data.
-  - [ ] Also make dynamic dashboards for timeseries data, currently I am only showing aggregate data. Need to figure out how to efficiently keep monthly data without overflowing PowerBI
+  - [ ] Also make dynamic dashboards for timeseries data, currently I am only showing aggregate data. Need to figure out how to efficiently keep monthly data without overflowing PowerBI <-- Currently here
   - [X] Use a faster querying warehouse for perform analytics on many rows instead of Postgres.
 - [ ] Uncover insights with ML algs (Inference/Predictions)
 - [ ] Support for lightweight LLM trained on the entire dataset to generate SQL queries. (?)
@@ -56,3 +55,5 @@ This is the history of Dragonite's stats in the gen9-ou 1825 ELO cutoff. (1825 E
 <img width="1165" height="654" alt="image" src="https://github.com/user-attachments/assets/fd2ec524-fbb3-4507-a399-12f5666c7cfa" />
 
 
+Now that I'm able to use my database to create aggregate data for any pokemon and metagame, I want to use my database to dynamically show timeseries data
+such as how the usage of certain pokemon changed over time given certain metagames. Or how the tera types of certain pokemon changed with meta changes.
