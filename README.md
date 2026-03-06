@@ -61,3 +61,14 @@ The history of a Golduck stats in the gen6ou 0 ELO cutoff. (No elo restriction)
 
 Now that I'm able to use my database to create aggregate data for any pokemon and metagame, I want to use my database to dynamically show timeseries data
 such as how the usage of certain pokemon changed over time given certain metagames. Or how the tera types of certain pokemon changed with meta changes. Currently working on this.
+
+I figured out that Apache Superset is a much better tool for what I want to achieve as it allows quick visualizations and analysis for both aggregate data as well as time-series data.
+
+<img width="1887" height="938" alt="image" src="https://github.com/user-attachments/assets/60664021-d8b2-4e57-a23e-b31619fedc14" />
+<img width="1882" height="889" alt="image" src="https://github.com/user-attachments/assets/e424128b-b398-4b17-99f9-0b7a8cd29553" />
+<img width="1887" height="896" alt="image" src="https://github.com/user-attachments/assets/21ce6e05-fd77-42a4-98f4-4a05d4966d14" />
+<img width="1877" height="883" alt="image" src="https://github.com/user-attachments/assets/70d94adc-c504-448a-b4da-d26b99e6b6f3" />
+
+Now, I will work on orchestration with Airflow for new monthly smogon data.
+
+
