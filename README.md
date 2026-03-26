@@ -25,6 +25,46 @@ These are the questions that I hope to be able to answer and visualize with this
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
+# Data Flow and Structure
+
+```mermaid
+graph TD
+    subgraph "Data Sources"
+        A[PokeAPI - REST]
+        B[Smogon Monthly Stats - JSON]
+    end
+
+    subgraph "Processing (Python)"
+        C{Data Extraction and Cleaning}
+        D[Normalize: ID, Moves, Abilities, Items, etc.]
+        E[Map Smogon Data  to PokeAPI IDs]
+    end
+
+    subgraph "Storage (Parquet/OLAP)"
+        F[(Parquet Files: ability.parquet, moves.parquet, etc.)]
+        G[(Parquet Files: smogon_moves.parquet, etc.)]
+        H[DuckDB Views]
+    end
+
+    subgraph "Analytics"
+        I[Apache Superset Dashboards]
+        J[Data Science Models]
+    end
+
+    A --> C
+    B --> E
+    C --> D
+    D --> F
+    F --> E
+    E --> G
+    G --> H
+    H --> I
+    H --> J
+    F -.->|Optional| H
+```
+
+
+
 
 <!-- ROADMAP -->
 ## Roadmap
